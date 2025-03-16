@@ -15,9 +15,9 @@ class Account(Controller):
     schema_update = AccountUpdate
     schema_response = AccountResponse
 
-    async def create(self, name: str) -> AccountResponse:
+    async def create(self, data: dict) -> AccountResponse:
         """Create a account."""
-        return await self._create(name=name)
+        return await self._create(data=data)
 
     async def update(self, uuid: str, data: dict) -> AccountResponse:
         """Update a account."""
@@ -31,6 +31,6 @@ class Account(Controller):
         """Delete a account."""
         return await self._delete(uuid=uuid)
 
-    async def list(self) -> List[AccountResponse]:
+    async def list(self, **kwargs) -> List[AccountResponse]:
         """List accounts."""
-        return await self._list()
+        return await self._list(**kwargs)

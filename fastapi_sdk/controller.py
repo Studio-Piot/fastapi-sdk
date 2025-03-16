@@ -21,9 +21,9 @@ class Controller:
         """Initialize the controller."""
         self.db_engine = db_engine
 
-    async def _create(self, **kwargs) -> BaseModel:
+    async def _create(self, data: dict) -> BaseModel:
         """Create a new model."""
-        data = self.schema_create(**kwargs)
+        data = self.schema_create(**data)
         model = self.model(**data.model_dump())
         return await self.db_engine.save(model)
 
