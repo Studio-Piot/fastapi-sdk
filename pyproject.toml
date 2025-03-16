@@ -1,0 +1,15 @@
+[project]
+name = "fastapi-sdk"
+version = "0.1.0"
+description = "Utilities for FastAPI projects."
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "fastapi[standard]>=0.115.11",
+    "odmantic>=1.0.2",
+    "pydantic>=2.10.6",
+    "pydantic-settings>=2.8.1",
+    "pytest>=8.3.5",
+    "pytest-asyncio>=0.25.3",
+    "shortuuid>=1.0.13",
+]
