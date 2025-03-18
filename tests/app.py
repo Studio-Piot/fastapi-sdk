@@ -4,43 +4,19 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
+from fastapi_sdk.controllers import ModelController
+from tests.controllers import Account, Project, Task
+
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
     """
     Lifespan context manager for FastAPI.
     """
-
-    # _app.include_router(
-    #     project_routes,
-    #     tags=["Customer API"],
-    #     prefix="/customers",
-    # )
-    # app.include_router(
-    #     product_routes,
-    #     tags=["Product API"],
-    #     prefix="/products",
-    # )
-    # app.include_router(
-    #     machine_routes,
-    #     tags=["Machine API"],
-    #     prefix="/machines",
-    # )
-    # app.include_router(
-    #     log_routes,
-    #     tags=["Log API"],
-    #     prefix="/logs",
-    # )
-    # app.include_router(
-    #     survey_routes,
-    #     tags=["Survey API"],
-    #     prefix="/surveys",
-    # )
-    # app.include_router(
-    #     stats_routes,
-    #     tags=["Statistics API"],
-    #     prefix="/stats",
-    # )
+    # Register controllers
+    ModelController.register_controller("Account", Account)
+    ModelController.register_controller("Project", Project)
+    ModelController.register_controller("Task", Task)
 
     yield
 

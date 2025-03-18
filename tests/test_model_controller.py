@@ -6,7 +6,16 @@ from datetime import UTC
 import pytest
 from motor.core import AgnosticDatabase
 
-from tests.controllers import Account
+from fastapi_sdk.controllers import ModelController
+from tests.controllers import Account, Project, Task
+
+
+@pytest.fixture(autouse=True)
+def register_controllers():
+    """Register controllers for testing."""
+    ModelController.register_controller("Account", Account)
+    ModelController.register_controller("Project", Project)
+    ModelController.register_controller("Task", Task)
 
 
 async def fixtures(db_engine: AgnosticDatabase):
@@ -18,8 +27,8 @@ async def fixtures(db_engine: AgnosticDatabase):
 
 
 @pytest.mark.asyncio
-async def test_controller(db_engine: AgnosticDatabase):
-    """Test controller."""
+async def test_model_controller(db_engine: AgnosticDatabase):
+    """Test model controller."""
 
     # Create two accounts, one for crud test and one for listing
     account_1, account_2 = await fixtures(db_engine)
@@ -111,3 +120,48 @@ async def test_list_options(db_engine: AgnosticDatabase):
     assert accounts["total"] == 2
     assert accounts["page"] == 0
     assert accounts["pages"] == 1
+
+
+@pytest.mark.asyncio
+async def test_relationships(db_engine: AgnosticDatabase):
+    """Test relationship handling between models."""
+    # Create an account
+    account = await Account(db_engine).create({"name": "Test Account"})
+
+    # Create a project for this account
+    project = await Project(db_engine).create(
+        {"name": "Test Project", "account_id": account.uuid}
+    )
+
+    # Create a task for this project
+    task = await Task(db_engine).create(
+        {
+            "description": "Test Task",
+            "account_id": account.uuid,
+            "project_id": project.uuid,
+        }
+    )
+
+    # Test getting account with related projects
+    account_with_projects = await Account(db_engine).get_with_relations(
+        uuid=account.uuid, include=["projects"]
+    )
+    assert len(account_with_projects.projects) == 1
+    assert account_with_projects.projects[0].uuid == project.uuid
+
+    # Test getting project with related account and tasks
+    project_with_relations = await Project(db_engine).get_with_relations(
+        uuid=project.uuid, include=["account", "tasks"]
+    )
+    assert project_with_relations.account.uuid == account.uuid
+    assert len(project_with_relations.tasks) == 1
+    assert project_with_relations.tasks[0].uuid == task.uuid
+
+    # Test cascade delete
+    await Account(db_engine).delete_with_relations(uuid=account.uuid)
+
+    # Verify everything is deleted
+    deleted_project = await Project(db_engine).get(uuid=project.uuid)
+    deleted_task = await Task(db_engine).get(uuid=task.uuid)
+    assert deleted_project is None
+    assert deleted_task is None

@@ -3,7 +3,7 @@
 from datetime import datetime
 from typing import List, Optional
 
-from odmantic import Field, Index, Model
+from odmantic import EmbeddedModel, Field, Index, Model
 
 from fastapi_sdk.utils.model import ShortUUID, ShortUUIDType
 from tests.constants import TaskStatusOptions
@@ -17,6 +17,7 @@ class AccountModel(Model):
     uuid: ShortUUIDType = Field(default_factory=lambda: ShortUUID.generate("acc"))
     name: Optional[str] = Field(default=None)
     deleted: bool = False
+    projects: Optional[List["ProjectModel"]] = Field(default=None)
 
     model_config = {
         "indexes": lambda: [
@@ -34,6 +35,8 @@ class ProjectModel(Model):
     account_id: str
     name: Optional[str] = Field(default=None)
     deleted: bool = False
+    account: Optional["AccountModel"] = Field(default=None)
+    tasks: Optional[List["TaskModel"]] = Field(default=None)
 
     model_config = {
         "indexes": lambda: [
@@ -55,6 +58,8 @@ class TaskModel(Model):
     status: Optional[TaskStatusOptions] = TaskStatusOptions.TO_DO
     due_date: Optional[datetime] = Field(default=None)
     deleted: bool = False
+    account: Optional["AccountModel"] = Field(default=None)
+    project: Optional["ProjectModel"] = Field(default=None)
 
     model_config = {
         "indexes": lambda: [
