@@ -284,4 +284,100 @@ class User(ModelController):
             "foreign_key": "owner_id",
         }
     }
-``` 
+```
+
+## Ownership Rules
+
+The ModelController supports ownership-based access control through the `OwnershipRule` class. This allows you to restrict access to records based on user claims.
+
+### OwnershipRule Configuration
+
+```python
+from fastapi_sdk.controllers import ModelController, OwnershipRule
+
+class ProjectController(ModelController):
+    model = ProjectModel
+    schema_create = ProjectCreate
+    schema_update = ProjectUpdate
+
+    # Configure ownership rule
+    ownership_rule = OwnershipRule(
+        claim_field="account_id",  # Field in user claims
+        model_field="account_id",  # Field in the model
+        allow_public=False,  # Whether to allow access without ownership
+    )
+```
+
+### How Ownership Works
+
+1. **Claim Field**: The field in the user's JWT claims to use for ownership (e.g., "account_id")
+2. **Model Field**: The field in your model to match against the claim value
+3. **Public Access**: Whether to allow access to records without ownership
+
+### Ownership in CRUD Operations
+
+The ownership rule affects all CRUD operations:
+
+- **Create**: Verifies that the provided data matches the user's claim
+- **Read**: Only returns records owned by the user
+- **Update**: Only allows updating owned records
+- **Delete**: Only allows deleting owned records
+- **List**: Only returns records owned by the user
+
+### Example Usage
+
+```python
+# User claims from JWT
+claims = {
+    "account_id": "acc_123",
+    "roles": ["user"]
+}
+
+# Create a project
+project = await controller.create(
+    data={"name": "My Project", "account_id": "acc_123"},
+    claims=claims
+)  # Success
+
+# Try to create a project for another account
+project = await controller.create(
+    data={"name": "My Project", "account_id": "acc_456"},
+    claims=claims
+)  # 403 Forbidden
+
+# List projects
+projects = await controller.list(claims=claims)
+# Only returns projects where account_id = "acc_123"
+
+# Get a project
+project = await controller.get("project_123", claims=claims)
+# Only succeeds if project.account_id = "acc_123"
+```
+
+### Error Handling
+
+The ownership system will return appropriate errors:
+
+- **Missing Claim**: 403 Forbidden if required claim is missing
+- **Invalid Ownership**: 403 Forbidden if trying to access/modify records owned by another user
+- **Not Found**: 404 Not Found if record doesn't exist or user doesn't have access
+
+### Public Access
+
+You can allow public access to records by setting `allow_public=True`:
+
+```python
+class PublicProjectController(ModelController):
+    ownership_rule = OwnershipRule(
+        claim_field="account_id",
+        model_field="account_id",
+        allow_public=True  # Anyone can access these records
+    )
+```
+
+### Best Practices
+
+1. **Consistent Field Names**: Use consistent field names between claims and models
+2. **Public Access**: Only enable public access when necessary
+3. **Error Messages**: Provide clear error messages for ownership violations
+4. **Testing**: Test both owned and non-owned access scenarios 

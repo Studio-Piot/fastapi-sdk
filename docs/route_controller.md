@@ -294,25 +294,26 @@ class AccountResponse(AccountBase):
 
 # Controller
 class AccountController(ModelController):
-    async def create(self, data: dict) -> AccountResponse:
-        # Implementation
-        pass
+    """Account controller."""
 
-    async def get(self, uuid: str) -> Optional[AccountResponse]:
-        # Implementation
-        pass
+    model = AccountModel
+    schema_create = AccountCreate
+    schema_update = AccountUpdate
+    schema_response = AccountResponse
+    cascade_delete = True  # Will delete related projects and tasks
+    ownership_rule = OwnershipRule(
+        claim_field="account_id",
+        model_field="uuid",
+        allow_public=False,
+    )
 
-    async def list(self, query: Optional[list] = None) -> list[AccountResponse]:
-        # Implementation
-        pass
-
-    async def update(self, uuid: str, data: dict) -> Optional[AccountResponse]:
-        # Implementation
-        pass
-
-    async def delete(self, uuid: str) -> bool:
-        # Implementation
-        pass
+    relationships = {
+        "projects": {
+            "type": "one_to_many",
+            "controller": "Project",
+            "foreign_key": "account_id",
+        }
+    }
 
 # FastAPI app
 app = FastAPI()
