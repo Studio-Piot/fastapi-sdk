@@ -45,6 +45,37 @@ pip install fastapi-sdk
 from fastapi import FastAPI
 from fastapi_sdk.controllers.route import RouteController
 from fastapi_sdk.middleware.auth import AuthMiddleware
+from fastapi_sdk.controllers import ModelController
+from fastapi_sdk.controllers.model import OwnershipRule
+from tests.models import AccountModel
+from tests.schemas import (
+    AccountCreate,
+    AccountResponse,
+    AccountUpdate,
+)
+
+
+class Account(ModelController):
+    """Account controller."""
+
+    model = AccountModel
+    schema_create = AccountCreate
+    schema_update = AccountUpdate
+    schema_response = AccountResponse
+    cascade_delete = True  # Will delete related projects and tasks
+    ownership_rule = OwnershipRule(
+        claim_field="account_id",
+        model_field="uuid",
+        allow_public=False,
+    )
+
+    relationships = {
+        "projects": {
+            "type": "one_to_many",
+            "controller": "Project",
+            "foreign_key": "account_id",
+        }
+    }
 
 app = FastAPI()
 
