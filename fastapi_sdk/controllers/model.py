@@ -1,12 +1,35 @@
 """Controller module for crud operations."""
 
 from datetime import UTC, datetime
-from typing import List, Optional, Type
+from typing import Any, Dict, List, Optional, Type, Union
 
+from fastapi import HTTPException
 from odmantic import AIOEngine, Model
 from pydantic import BaseModel
 
 from fastapi_sdk.utils.schema import datetime_now_sec
+
+
+class OwnershipRule:
+    """Rule for filtering records based on user claims."""
+
+    def __init__(
+        self,
+        *,
+        claim_field: str,
+        model_field: str,
+        allow_public: bool = False,
+    ):
+        """Initialize the ownership rule.
+
+        Args:
+            claim_field: The field in the user claims to use (e.g., "account_id")
+            model_field: The field in the model to match against (e.g., "account_id")
+            allow_public: Whether to allow access to records without ownership
+        """
+        self.claim_field = claim_field
+        self.model_field = model_field
+        self.allow_public = allow_public
 
 
 class ModelController:
@@ -18,6 +41,7 @@ class ModelController:
     n_per_page: int = 10
     relationships: dict = {}  # Define relationships between models
     cascade_delete: bool = False  # Whether to cascade delete related items
+    ownership_rule: Optional[OwnershipRule] = None  # Rule for filtering records
     _controller_registry: dict = {}  # Registry for controller classes
 
     def __init__(self, db_engine: AIOEngine):
@@ -36,33 +60,92 @@ class ModelController:
         """Get a controller class by name."""
         return cls._controller_registry[name]
 
-    async def create(self, data: dict) -> BaseModel:
+    def _get_ownership_filter(self, claims: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """Get the ownership filter based on user claims.
+
+        Args:
+            claims: The user claims from the JWT token
+
+        Returns:
+            A filter dictionary or None if no ownership rule is set
+        """
+        if not self.ownership_rule:
+            return None
+
+        claim_value = claims.get(self.ownership_rule.claim_field)
+        if not claim_value and not self.ownership_rule.allow_public:
+            raise HTTPException(
+                status_code=403,
+                detail=f"Missing required claim: {self.ownership_rule.claim_field}",
+            )
+
+        return {self.ownership_rule.model_field: claim_value} if claim_value else None
+
+    async def create(
+        self, data: dict, claims: Optional[Dict[str, Any]] = None
+    ) -> BaseModel:
         """Create a new model."""
         data = self.schema_create(**data)
-        model = self.model(**data.model_dump())
+        data_dict = data.model_dump()
+
+        # Verify ownership if rule exists
+        if self.ownership_rule and claims:
+            ownership_filter = self._get_ownership_filter(claims)
+            if ownership_filter and self.ownership_rule.model_field != "uuid":
+                # Check if the provided data matches the user's claim
+                if (
+                    data_dict.get(self.ownership_rule.model_field)
+                    != ownership_filter[self.ownership_rule.model_field]
+                ):
+                    raise HTTPException(
+                        status_code=403,
+                        detail=f"Invalid {self.ownership_rule.model_field}",
+                    )
+
+        model = self.model(**data_dict)
         return await self.db_engine.save(model)
 
-    async def update(self, uuid: str, data: dict) -> BaseModel:
+    async def update(
+        self, uuid: str, data: dict, claims: Optional[Dict[str, Any]] = None
+    ) -> Optional[BaseModel]:
         """Update a model."""
-        model = await self.get(uuid)
+        model = await self.get(uuid, claims)
+        if not model:
+            return None
+
         data = self.schema_update(**data)
-        if model:
-            # Update the fields submitted
-            for field in data.model_dump(exclude_unset=True):
-                setattr(model, field, data.model_dump()[field])
-            model.updated_at = datetime_now_sec()
-            return await self.db_engine.save(model)
-        return None
+        # Update the fields submitted
+        for field in data.model_dump(exclude_unset=True):
+            setattr(model, field, data.model_dump()[field])
+        model.updated_at = datetime_now_sec()
+        return await self.db_engine.save(model)
 
-    async def get(self, uuid: str) -> BaseModel:
+    async def get(
+        self, uuid: str, claims: Optional[Dict[str, Any]] = None
+    ) -> Optional[BaseModel]:
         """Get a model."""
-        return await self.db_engine.find_one(
-            self.model, self.model.uuid == uuid, self.model.deleted == False
-        )
+        query = (self.model.uuid == uuid) & (self.model.deleted == False)
 
-    async def delete(self, uuid: str) -> BaseModel:
+        # Apply ownership filter if rule exists
+        if self.ownership_rule and claims:
+            ownership_filter = self._get_ownership_filter(claims)
+            if ownership_filter:
+                query = (
+                    (self.model.uuid == uuid)
+                    & (self.model.deleted == False)
+                    & (
+                        getattr(self.model, self.ownership_rule.model_field)
+                        == ownership_filter[self.ownership_rule.model_field]
+                    )
+                )
+
+        return await self.db_engine.find_one(self.model, query)
+
+    async def delete(
+        self, uuid: str, claims: Optional[Dict[str, Any]] = None
+    ) -> Optional[BaseModel]:
         """Delete a model."""
-        model = await self.get(uuid)
+        model = await self.get(uuid, claims)
         if model:
             model.deleted = True
             return await self.db_engine.save(model)
@@ -73,6 +156,7 @@ class ModelController:
         page: int = 0,
         query: Optional[List[dict]] = None,
         order_by: Optional[dict] = None,
+        claims: Optional[Dict[str, Any]] = None,
     ) -> List[BaseModel]:
         """List models."""
         # Get the collection
@@ -85,14 +169,18 @@ class ModelController:
         _pipeline = []
 
         # Filter out deleted models by default
-        # Example query: [{"due_date": {"$gte": start_date}}]
         _query = {"deleted": False}
         if query:
             for q in query:
                 _query.update(q)
 
+        # Apply ownership filter if rule exists
+        if self.ownership_rule and claims:
+            ownership_filter = self._get_ownership_filter(claims)
+            if ownership_filter:
+                _query.update(ownership_filter)
+
         # Sorting, default by created_at
-        # Order by example: {"name": -1}, 1 ascending, -1 descending
         _sort = order_by if order_by else {"created_at": -1}
 
         # Add the pipeline stages
@@ -113,15 +201,13 @@ class ModelController:
         if total % self.n_per_page > 0:
             pages += 1
 
-        data = {
+        return {
             "items": [self.model.model_validate_doc(item) for item in items],
             "total": total,
-            "size": len(items),
             "page": page,
             "pages": pages,
+            "size": len(items),
         }
-
-        return data
 
     async def list_related(self, foreign_key: str, value: str) -> List[BaseModel]:
         """List related models by foreign key."""

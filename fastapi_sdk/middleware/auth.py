@@ -9,7 +9,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import JSONResponse
 
-from fastapi_sdk.utils.security import decode_access_token
+from fastapi_sdk.security.oauth import decode_access_token
 
 
 class AuthMiddleware(BaseHTTPMiddleware):

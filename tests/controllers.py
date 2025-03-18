@@ -1,8 +1,7 @@
 """Controllers for tests."""
 
-from typing import List, Optional
-
 from fastapi_sdk.controllers import ModelController
+from fastapi_sdk.controllers.model import OwnershipRule
 from tests.models import AccountModel, ProjectModel, TaskModel
 from tests.schemas import (
     AccountCreate,
@@ -25,6 +24,11 @@ class Account(ModelController):
     schema_update = AccountUpdate
     schema_response = AccountResponse
     cascade_delete = True  # Will delete related projects and tasks
+    ownership_rule = OwnershipRule(
+        claim_field="account_id",
+        model_field="uuid",
+        allow_public=False,
+    )
 
     relationships = {
         "projects": {
@@ -43,6 +47,11 @@ class Project(ModelController):
     schema_update = ProjectUpdate
     schema_response = ProjectResponse
     cascade_delete = True  # Will delete related tasks
+    ownership_rule = OwnershipRule(
+        claim_field="account_id",
+        model_field="account_id",
+        allow_public=False,
+    )
 
     relationships = {
         "account": {
@@ -65,6 +74,11 @@ class Task(ModelController):
     schema_create = TaskCreate
     schema_update = TaskUpdate
     schema_response = TaskResponse
+    ownership_rule = OwnershipRule(
+        claim_field="account_id",
+        model_field="account_id",
+        allow_public=False,
+    )
 
     relationships = {
         "account": {
@@ -78,3 +92,16 @@ class Task(ModelController):
             "foreign_key": "project_id",
         },
     }
+
+
+class PublicController(ModelController):
+    """Test controller with public access."""
+
+    model = ProjectModel
+    schema_create = ProjectCreate
+    schema_update = ProjectUpdate
+    ownership_rule = OwnershipRule(
+        claim_field="account_id",
+        model_field="account_id",
+        allow_public=True,
+    )

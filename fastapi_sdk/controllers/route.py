@@ -10,6 +10,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 
 from fastapi_sdk.controllers import ModelController
+from fastapi_sdk.security.permissions import require_permission
 from fastapi_sdk.utils.schema import BaseResponsePaginated
 
 
@@ -60,6 +61,9 @@ class RouteController:
             "list_deleted",
         ]
 
+        # Get model name for permissions
+        self.model_name = controller.model.__name__.lower().replace("model", "")
+
         self.router = APIRouter(prefix=prefix, tags=tags)
         self._setup_routes()
 
@@ -87,26 +91,34 @@ class RouteController:
         """Add create route."""
 
         @self.router.post("/", response_model=self.schema_response)
+        @require_permission(f"{self.model_name}:create")
         async def create_route(
             request: Request,
             data: self.schema_create,  # type: ignore
             db: Any = Depends(self.get_db),
         ):
             """Create a new resource (requires authentication)."""
-            instance = await self.controller(db).create(data.model_dump())
+            instance = await self.controller(db).create(
+                data.model_dump(),
+                claims=request.state.claims,
+            )
             return self.schema_response(**instance.model_dump())
 
     def _add_get_route(self) -> None:
         """Add get by ID route."""
 
         @self.router.get("/{resource_id}", response_model=self.schema_response)
+        @require_permission(f"{self.model_name}:read")
         async def get_route(
             request: Request,
             resource_id: str,
             db: Any = Depends(self.get_db),
         ):
             """Get a resource by ID (requires authentication)."""
-            instance = await self.controller(db).get(uuid=resource_id)
+            instance = await self.controller(db).get(
+                uuid=resource_id,
+                claims=request.state.claims,
+            )
             if not instance:
                 raise HTTPException(status_code=404, detail="Resource not found")
             return self.schema_response(**instance.model_dump())
@@ -115,18 +127,22 @@ class RouteController:
         """Add list route."""
 
         @self.router.get("/", response_model=self.schema_response_paginated)
+        @require_permission(f"{self.model_name}:read")
         async def list_route(
             request: Request,
             db: Any = Depends(self.get_db),
         ):
             """List all resources (requires authentication)."""
-            instances = await self.controller(db).list()
+            instances = await self.controller(db).list(
+                claims=request.state.claims,
+            )
             return instances
 
     def _add_update_route(self) -> None:
         """Add update route."""
 
         @self.router.put("/{resource_id}", response_model=self.schema_response)
+        @require_permission(f"{self.model_name}:update")
         async def update_route(
             request: Request,
             resource_id: str,
@@ -135,7 +151,9 @@ class RouteController:
         ):
             """Update a resource (requires authentication)."""
             instance = await self.controller(db).update(
-                uuid=resource_id, data=data.model_dump(exclude_unset=True)
+                uuid=resource_id,
+                data=data.model_dump(exclude_unset=True),
+                claims=request.state.claims,
             )
             if not instance:
                 raise HTTPException(status_code=404, detail="Resource not found")
@@ -145,13 +163,17 @@ class RouteController:
         """Add delete route."""
 
         @self.router.delete("/{resource_id}")
+        @require_permission(f"{self.model_name}:delete")
         async def delete_route(
             request: Request,
             resource_id: str,
             db: Any = Depends(self.get_db),
         ):
             """Soft delete a resource (requires authentication)."""
-            if not await self.controller(db).delete(uuid=resource_id):
+            if not await self.controller(db).delete(
+                uuid=resource_id,
+                claims=request.state.claims,
+            ):
                 raise HTTPException(status_code=404, detail="Resource not found")
             return {"message": "Resource soft deleted"}
 
@@ -159,10 +181,14 @@ class RouteController:
         """Add list deleted route."""
 
         @self.router.get("/deleted/", response_model=self.schema_response_paginated)
+        @require_permission(f"{self.model_name}:read")
         async def list_deleted_route(
             request: Request,
             db: Any = Depends(self.get_db),
         ):
             """List all deleted resources (requires authentication)."""
-            instances = await self.controller(db).list(query=[{"deleted": True}])
+            instances = await self.controller(db).list(
+                query=[{"deleted": True}],
+                claims=request.state.claims,
+            )
             return instances

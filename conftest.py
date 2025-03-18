@@ -59,11 +59,29 @@ async def clear_database(db_engine):
 
 
 @pytest.fixture
-def mock_jwt_token():
+def mock_jwt_token(account):
     """Generates a mock JWT token for testing."""
     return create_access_token(
         test_private_key_path=settings.TEST_PRIVATE_KEY_PATH,
-        data={"sub": "test_user"},
+        data={
+            "sub": "test_user",
+            "account_id": account.uuid,
+            "roles": ["admin"],
+            "permissions": [
+                "account:create",
+                "account:read",
+                "account:update",
+                "account:delete",
+                "project:create",
+                "project:read",
+                "project:update",
+                "project:delete",
+                "task:create",
+                "task:read",
+                "task:update",
+                "task:delete",
+            ],
+        },
         expires_delta=timedelta(minutes=30),
     )
 
@@ -72,6 +90,73 @@ def mock_jwt_token():
 def auth_headers(mock_jwt_token):
     """Create headers with JWT token."""
     return {"Authorization": f"Bearer {mock_jwt_token}"}
+
+
+@pytest.fixture
+def mock_jwt_token_no_account_id():
+    """Generates a mock JWT token for testing."""
+    return create_access_token(
+        test_private_key_path=settings.TEST_PRIVATE_KEY_PATH,
+        data={
+            "sub": "test_user",
+            "roles": ["admin"],
+            "permissions": [
+                "account:create",
+                "account:read",
+                "account:update",
+                "account:delete",
+                "project:create",
+                "project:read",
+                "project:update",
+                "project:delete",
+                "task:create",
+                "task:read",
+                "task:update",
+                "task:delete",
+            ],
+        },
+        expires_delta=timedelta(minutes=30),
+    )
+
+
+@pytest.fixture
+def auth_headers_no_account_id(mock_jwt_token_no_account_id):
+    """Create headers with JWT token."""
+    return {"Authorization": f"Bearer {mock_jwt_token_no_account_id}"}
+
+
+@pytest.fixture
+def different_mock_jwt_token():
+    """Generates a mock JWT token for testing."""
+    return create_access_token(
+        test_private_key_path=settings.TEST_PRIVATE_KEY_PATH,
+        data={
+            "sub": "test_user",
+            "account_id": "acc_456",
+            "roles": ["admin"],
+            "permissions": [
+                "account:create",
+                "account:read",
+                "account:update",
+                "account:delete",
+                "project:create",
+                "project:read",
+                "project:update",
+                "project:delete",
+                "task:create",
+                "task:read",
+                "task:update",
+                "task:delete",
+            ],
+        },
+        expires_delta=timedelta(minutes=30),
+    )
+
+
+@pytest.fixture
+def different_auth_headers(different_mock_jwt_token):
+    """Create headers with JWT token."""
+    return {"Authorization": f"Bearer {different_mock_jwt_token}"}
 
 
 @pytest_asyncio.fixture
