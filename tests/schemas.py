@@ -16,7 +16,7 @@ from typing import List, Optional
 from pydantic import BaseModel, ConfigDict, Field
 
 from fastapi_sdk.utils.model import ShortUUIDType
-from fastapi_sdk.utils.schema import datetime_now_sec
+from fastapi_sdk.utils.schema import BaseResponsePaginated, datetime_now_sec
 from tests.constants import TaskStatusOptions
 
 ###########
@@ -54,6 +54,12 @@ class AccountResponse(AccountBase):
     model_config = ConfigDict(from_attributes=True)
 
 
+class AccountResponsePaginated(BaseResponsePaginated):
+    """Schema for paginatedAPI responses"""
+
+    items: List[AccountResponse]
+
+
 ###########
 # Project #
 ###########
@@ -76,6 +82,7 @@ class ProjectCreate(ProjectBase):
 class ProjectUpdate(ProjectBase):
     """Schema for updating a project"""
 
+    account_id: Optional[str] = Field(default=None)
     updated_at: datetime = Field(default_factory=datetime_now_sec)
 
 
@@ -88,6 +95,12 @@ class ProjectResponse(ProjectBase):
     deleted: bool
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class ProjectResponsePaginated(BaseResponsePaginated):
+    """Schema for paginated API responses"""
+
+    items: List[ProjectResponse]
 
 
 ###########
@@ -116,6 +129,8 @@ class TaskCreate(TaskBase):
 class TaskUpdate(TaskBase):
     """Schema for updating a task"""
 
+    project_id: Optional[str] = Field(default=None)
+    account_id: Optional[str] = Field(default=None)
     updated_at: datetime = Field(default_factory=datetime_now_sec)
 
 
@@ -128,3 +143,9 @@ class TaskResponse(TaskBase):
     deleted: bool
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class TaskResponsePaginated(BaseResponsePaginated):
+    """Schema for paginated API responses"""
+
+    items: List[TaskResponse]

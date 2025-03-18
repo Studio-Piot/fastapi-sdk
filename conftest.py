@@ -1,5 +1,6 @@
 """Pytest configuration file for the tests."""
 
+from datetime import UTC, datetime, timedelta
 from typing import AsyncGenerator, Generator
 
 import pytest
@@ -8,7 +9,9 @@ from fastapi.testclient import TestClient
 from motor.motor_asyncio import AsyncIOMotorClient
 from odmantic import AIOEngine
 
+from fastapi_sdk.utils.test import create_access_token
 from tests.app import app
+from tests.config import settings
 from tests.db import get_db_engine
 from tests.models import AccountModel, ProjectModel, TaskModel
 
@@ -53,3 +56,110 @@ async def clear_database(db_engine):
     await db_engine.remove(AccountModel, {})
     await db_engine.remove(ProjectModel, {})
     await db_engine.remove(TaskModel, {})
+
+
+@pytest.fixture
+def mock_jwt_token():
+    """Generates a mock JWT token for testing."""
+    return create_access_token(
+        test_private_key_path=settings.TEST_PRIVATE_KEY_PATH,
+        data={"sub": "test_user"},
+        expires_delta=timedelta(minutes=30),
+    )
+
+
+@pytest.fixture
+def auth_headers(mock_jwt_token):
+    """Create headers with JWT token."""
+    return {"Authorization": f"Bearer {mock_jwt_token}"}
+
+
+@pytest_asyncio.fixture
+async def account(db_engine):
+    """Create a test account."""
+    _account = AccountModel(
+        name="TestAccount",
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
+    )
+    await db_engine.save(_account)
+    yield _account
+    await db_engine.delete(_account)
+
+
+@pytest_asyncio.fixture
+async def deleted_account(db_engine):
+    """Create a deleted test account."""
+    _account = AccountModel(
+        name="Deleted Account",
+        deleted=True,
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
+    )
+    await db_engine.save(_account)
+    yield _account
+    await db_engine.delete(_account)
+
+
+@pytest_asyncio.fixture
+async def project(db_engine, account):
+    """Create a test project."""
+    project = ProjectModel(
+        name="Test Project",
+        description="Test Description",
+        account_id=account.uuid,
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
+    )
+    await db_engine.save(project)
+    yield project
+    await db_engine.delete(project)
+
+
+@pytest_asyncio.fixture
+async def deleted_project(db_engine, account):
+    """Create a deleted test project."""
+    project = ProjectModel(
+        name="Deleted Project",
+        description="Deleted Description",
+        account_id=account.uuid,
+        deleted=True,
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
+    )
+    await db_engine.save(project)
+    yield project
+    await db_engine.delete(project)
+
+
+@pytest_asyncio.fixture
+async def task(db_engine, project, account):
+    """Create a test task."""
+    task = TaskModel(
+        title="Test Task",
+        description="Test Description",
+        project_id=project.uuid,
+        account_id=account.uuid,
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
+    )
+    await db_engine.save(task)
+    yield task
+    await db_engine.delete(task)
+
+
+@pytest_asyncio.fixture
+async def deleted_task(db_engine, project, account):
+    """Create a deleted test task."""
+    task = TaskModel(
+        title="Deleted Task",
+        description="Deleted Description",
+        project_id=project.uuid,
+        account_id=account.uuid,
+        deleted=True,
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
+    )
+    await db_engine.save(task)
+    yield task
+    await db_engine.delete(task)
