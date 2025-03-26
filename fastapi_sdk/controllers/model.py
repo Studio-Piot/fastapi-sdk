@@ -72,6 +72,10 @@ class ModelController:
         if not self.ownership_rule:
             return None
 
+        # Superuser has full access
+        if claims.get("role") == "superuser":
+            return None
+
         claim_value = claims.get(self.ownership_rule.claim_field)
         if not claim_value and not self.ownership_rule.allow_public:
             raise HTTPException(
@@ -89,18 +93,28 @@ class ModelController:
         data_dict = data.model_dump()
 
         # Verify ownership if rule exists
-        if self.ownership_rule and claims:
-            ownership_filter = self._get_ownership_filter(claims)
-            if ownership_filter and self.ownership_rule.model_field != "uuid":
-                # Check if the provided data matches the user's claim
-                if (
-                    data_dict.get(self.ownership_rule.model_field)
-                    != ownership_filter[self.ownership_rule.model_field]
-                ):
-                    raise HTTPException(
-                        status_code=403,
-                        detail=f"Invalid {self.ownership_rule.model_field}",
-                    )
+        if self.ownership_rule:
+            if (
+                not self.ownership_rule.allow_public
+                and not claims
+                and self.ownership_rule.model_field != "uuid"
+            ):
+                raise HTTPException(
+                    status_code=403,
+                    detail="Claims must be provided when ownership rule is set and allow_public is False",
+                )
+            if claims:
+                ownership_filter = self._get_ownership_filter(claims)
+                if ownership_filter and self.ownership_rule.model_field != "uuid":
+                    # Check if the provided data matches the user's claim
+                    if (
+                        data_dict.get(self.ownership_rule.model_field)
+                        != ownership_filter[self.ownership_rule.model_field]
+                    ):
+                        raise HTTPException(
+                            status_code=403,
+                            detail=f"Invalid {self.ownership_rule.model_field}",
+                        )
 
         model = self.model(**data_dict)
         return await self.db_engine.save(model)
@@ -121,23 +135,36 @@ class ModelController:
         return await self.db_engine.save(model)
 
     async def get(
-        self, uuid: str, claims: Optional[Dict[str, Any]] = None
+        self,
+        uuid: str,
+        claims: Optional[Dict[str, Any]] = None,
+        include_deleted: bool = False,
     ) -> Optional[BaseModel]:
-        """Get a model."""
-        query = (self.model.uuid == uuid) & (self.model.deleted == False)
+        """Get a model.
+
+        Args:
+            uuid: The UUID of the model to get
+            claims: Optional claims for ownership verification
+            include_deleted: Whether to include deleted items in the query
+        """
+        query = self.model.uuid == uuid
+        if not include_deleted:
+            query = query & (self.model.deleted == False)
 
         # Apply ownership filter if rule exists
-        if self.ownership_rule and claims:
-            ownership_filter = self._get_ownership_filter(claims)
-            if ownership_filter:
-                query = (
-                    (self.model.uuid == uuid)
-                    & (self.model.deleted == False)
-                    & (
+        if self.ownership_rule:
+            if not self.ownership_rule.allow_public and not claims:
+                raise HTTPException(
+                    status_code=403,
+                    detail="Claims must be provided when ownership rule is set and allow_public is False",
+                )
+            if claims:
+                ownership_filter = self._get_ownership_filter(claims)
+                if ownership_filter:
+                    query = query & (
                         getattr(self.model, self.ownership_rule.model_field)
                         == ownership_filter[self.ownership_rule.model_field]
                     )
-                )
 
         return await self.db_engine.find_one(self.model, query)
 
@@ -148,6 +175,24 @@ class ModelController:
         model = await self.get(uuid, claims)
         if model:
             model.deleted = True
+            return await self.db_engine.save(model)
+        return None
+
+    async def undelete(
+        self, uuid: str, claims: Optional[Dict[str, Any]] = None
+    ) -> Optional[BaseModel]:
+        """Undelete a model by setting deleted to False.
+
+        Args:
+            uuid: The UUID of the model to undelete
+            claims: Optional claims for ownership verification
+
+        Returns:
+            The undeleted model or None if not found
+        """
+        model = await self.get(uuid, claims, include_deleted=True)
+        if model:
+            model.deleted = False
             return await self.db_engine.save(model)
         return None
 
@@ -175,10 +220,17 @@ class ModelController:
                 _query.update(q)
 
         # Apply ownership filter if rule exists
-        if self.ownership_rule and claims:
-            ownership_filter = self._get_ownership_filter(claims)
-            if ownership_filter:
-                _query.update(ownership_filter)
+        if self.ownership_rule:
+            if not self.ownership_rule.allow_public and not claims:
+                raise HTTPException(
+                    status_code=403,
+                    detail="Claims must be provided when ownership rule is set and allow_public is False",
+                )
+            if claims:
+                ownership_filter = self._get_ownership_filter(claims)
+                print("ownership_filter", ownership_filter)
+                if ownership_filter:
+                    _query.update(ownership_filter)
 
         # Sorting, default by created_at
         _sort = order_by if order_by else {"created_at": -1}
@@ -209,16 +261,21 @@ class ModelController:
             "size": len(items),
         }
 
-    async def list_related(self, foreign_key: str, value: str) -> List[BaseModel]:
+    async def list_related(
+        self, foreign_key: str, value: str, claims: Optional[Dict[str, Any]] = None
+    ) -> List[BaseModel]:
         """List related models by foreign key."""
-        result = await self.list(query=[{foreign_key: value}])
+        result = await self.list(query=[{foreign_key: value}], claims=claims)
         return result["items"]
 
     async def get_with_relations(
-        self, uuid: str, include: Optional[List[str]] = None
+        self,
+        uuid: str,
+        include: Optional[List[str]] = None,
+        claims: Optional[Dict[str, Any]] = None,
     ) -> BaseModel:
         """Get a model with its relationships."""
-        model = await self.get(uuid)
+        model = await self.get(uuid, claims)
         if not model or not include:
             return model
 
@@ -237,21 +294,23 @@ class ModelController:
             if rel_type == "one_to_many":
                 # Fetch related items where foreign_key matches this model's uuid
                 related_items = await rel_controller_class(self.db_engine).list_related(
-                    foreign_key=foreign_key, value=model.uuid
+                    foreign_key=foreign_key, value=model.uuid, claims=claims
                 )
                 setattr(model, relation, related_items)
             elif rel_type == "many_to_one":
                 # Fetch single related item
                 related_item = await rel_controller_class(self.db_engine).get(
-                    uuid=getattr(model, foreign_key)
+                    uuid=getattr(model, foreign_key), claims=claims
                 )
                 setattr(model, relation, related_item)
 
         return model
 
-    async def delete_with_relations(self, uuid: str) -> BaseModel:
+    async def delete_with_relations(
+        self, uuid: str, claims: Optional[Dict[str, Any]] = None
+    ) -> BaseModel:
         """Delete a model and its related items if cascade_delete is True."""
-        model = await self.get(uuid)
+        model = await self.get(uuid, claims)
         if not model:
             return None
 
@@ -267,11 +326,11 @@ class ModelController:
                     # Find all related items
                     related_items = await rel_controller_class(
                         self.db_engine
-                    ).list_related(foreign_key=foreign_key, value=uuid)
+                    ).list_related(foreign_key=foreign_key, value=uuid, claims=claims)
                     # Delete each related item
                     for item in related_items:
                         await rel_controller_class(
                             self.db_engine
-                        ).delete_with_relations(item.uuid)
+                        ).delete_with_relations(item.uuid, claims=claims)
 
-        return await self.delete(uuid)
+        return await self.delete(uuid, claims)

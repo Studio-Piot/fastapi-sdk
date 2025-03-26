@@ -21,6 +21,7 @@ def register_controllers():
 
 async def fixtures(db_engine: AgnosticDatabase):
     """Re-usable test fictures"""
+    # Create two accounts without claims (top-level model)
     account_1 = await Account(db_engine).create({"name": "Account 1"})
     account_2 = await Account(db_engine).create({"name": "Account 2"})
 
@@ -40,7 +41,9 @@ async def test_model_controller(db_engine: AgnosticDatabase):
     assert account_1.updated_at
 
     # Get account
-    account_1 = await Account(db_engine).get(uuid=account_1.uuid)
+    account_1 = await Account(db_engine).get(
+        uuid=account_1.uuid, claims={"account_id": account_1.uuid}
+    )
     assert account_1
 
     # Sleep for 1 seconds to test updated_at
@@ -48,40 +51,102 @@ async def test_model_controller(db_engine: AgnosticDatabase):
 
     # Update account
     account_1 = await Account(db_engine).update(
-        uuid=account_1.uuid, data={"name": "Account 1 Updated"}
+        uuid=account_1.uuid,
+        data={"name": "Account 1 Updated"},
+        claims={"account_id": account_1.uuid},
     )
 
     assert account_1.name == "Account 1 Updated"
     assert account_1.updated_at > account_1.created_at.replace(tzinfo=UTC)
 
     # List accounts
-    accounts = await Account(db_engine).list()
-    assert len(accounts["items"]) == 2
-    assert accounts["total"] == 2
+    accounts = await Account(db_engine).list(claims={"account_id": account_1.uuid})
+    assert len(accounts["items"]) == 1
+    assert accounts["total"] == 1
     assert accounts["page"] == 0
     assert accounts["pages"] == 1
 
     # Delete account
-    account_1 = await Account(db_engine).delete(uuid=account_1.uuid)
+    account_1 = await Account(db_engine).delete(
+        uuid=account_1.uuid, claims={"account_id": account_1.uuid}
+    )
     assert account_1.deleted is True
 
     # Get deleted account
-    deleted_account = await Account(db_engine).get(uuid=account_1.uuid)
+    deleted_account = await Account(db_engine).get(
+        uuid=account_1.uuid, claims={"account_id": account_1.uuid}
+    )
     assert deleted_account is None
+
+    # Get deleted account with include_deleted=True
+    deleted_account = await Account(db_engine).get(
+        uuid=account_1.uuid, claims={"account_id": account_1.uuid}, include_deleted=True
+    )
+    assert deleted_account is not None
+    assert deleted_account.deleted is True
 
     # Update deleted account
     deleted_account = await Account(db_engine).update(
-        uuid=account_1.uuid, data={"name": "Account 1 Updated"}
+        uuid=account_1.uuid,
+        data={"name": "Account 1 Updated"},
+        claims={"account_id": account_1.uuid},
     )
     assert deleted_account is None
 
     # List accounts with one deleted
-    accounts = await Account(db_engine).list()
+    accounts = await Account(db_engine).list(claims={"account_id": account_2.uuid})
     assert len(accounts["items"]) == 1
     assert accounts["items"][0].uuid == account_2.uuid
     assert accounts["total"] == 1
     assert accounts["page"] == 0
     assert accounts["pages"] == 1
+
+    # Undelete account
+    undeleted_account = await Account(db_engine).undelete(
+        uuid=account_1.uuid, claims={"account_id": account_1.uuid}
+    )
+    assert undeleted_account is not None
+    assert undeleted_account.deleted is False
+    assert undeleted_account.uuid == account_1.uuid
+
+    # Verify account is now accessible without include_deleted
+    restored_account = await Account(db_engine).get(
+        uuid=account_1.uuid, claims={"account_id": account_1.uuid}
+    )
+    assert restored_account is not None
+    assert restored_account.deleted is False
+
+    # Test superuser access
+    superuser_claims = {"account_id": account_2.uuid, "role": "superuser"}
+
+    # Superuser can list all accounts
+    all_accounts = await Account(db_engine).list(claims=superuser_claims)
+    assert len(all_accounts["items"]) == 2
+    assert all_accounts["total"] == 2
+
+    # Superuser can get any account
+    _account_1 = await Account(db_engine).get(
+        uuid=account_1.uuid, claims=superuser_claims
+    )
+    _account_2 = await Account(db_engine).get(
+        uuid=account_2.uuid, claims=superuser_claims
+    )
+    assert _account_1 is not None
+    assert _account_2 is not None
+
+    # Superuser can update any account
+    updated_account = await Account(db_engine).update(
+        uuid=account_1.uuid,
+        data={"name": "Account 1 Superuser Updated"},
+        claims=superuser_claims,
+    )
+    assert updated_account.name == "Account 1 Superuser Updated"
+
+    # Superuser can delete any account
+    deleted_account = await Account(db_engine).delete(
+        uuid=account_2.uuid, claims=superuser_claims
+    )
+    assert deleted_account.deleted is True
 
 
 @pytest.mark.asyncio
@@ -92,21 +157,28 @@ async def test_list_options(db_engine: AgnosticDatabase):
     account_1, account_2 = await fixtures(db_engine)
 
     # Default listing
-    accounts = await Account(db_engine).list()
+    accounts = await Account(db_engine).list(
+        claims={"account_id": account_1.uuid, "role": "superuser"}
+    )
     assert len(accounts["items"]) == 2
     assert accounts["total"] == 2
     assert accounts["page"] == 0
     assert accounts["pages"] == 1
 
     # List with page 2 (Page 1 is the same as default, page 0)
-    accounts = await Account(db_engine).list(page=2)
+    accounts = await Account(db_engine).list(
+        page=2, claims={"account_id": account_1.uuid, "role": "superuser"}
+    )
     assert len(accounts["items"]) == 0
     assert accounts["total"] == 2
     assert accounts["page"] == 2
     assert accounts["pages"] == 1
 
     # List with query
-    accounts = await Account(db_engine).list(query=[{"name": "Account 1"}])
+    accounts = await Account(db_engine).list(
+        query=[{"name": "Account 1"}],
+        claims={"account_id": account_1.uuid, "role": "superuser"},
+    )
     assert len(accounts["items"]) == 1
     assert accounts["items"][0].uuid == account_1.uuid
     assert accounts["total"] == 1
@@ -114,7 +186,10 @@ async def test_list_options(db_engine: AgnosticDatabase):
     assert accounts["pages"] == 1
 
     # List with order_by
-    accounts = await Account(db_engine).list(order_by={"name": -1})
+    accounts = await Account(db_engine).list(
+        order_by={"name": -1},
+        claims={"account_id": account_1.uuid, "role": "superuser"},
+    )
     assert len(accounts["items"]) == 2
     assert accounts["items"][0].uuid == account_2.uuid
     assert accounts["items"][1].uuid == account_1.uuid
@@ -131,7 +206,8 @@ async def test_relationships(db_engine: AgnosticDatabase):
 
     # Create a project for this account
     project = await Project(db_engine).create(
-        {"name": "Test Project", "account_id": account.uuid}
+        {"name": "Test Project", "account_id": account.uuid},
+        claims={"account_id": account.uuid},
     )
 
     # Create a task for this project
@@ -140,30 +216,39 @@ async def test_relationships(db_engine: AgnosticDatabase):
             "description": "Test Task",
             "account_id": account.uuid,
             "project_id": project.uuid,
-        }
+        },
+        claims={"account_id": account.uuid},
     )
 
     # Test getting account with related projects
     account_with_projects = await Account(db_engine).get_with_relations(
-        uuid=account.uuid, include=["projects"]
+        uuid=account.uuid, include=["projects"], claims={"account_id": account.uuid}
     )
     assert len(account_with_projects.projects) == 1
     assert account_with_projects.projects[0].uuid == project.uuid
 
     # Test getting project with related account and tasks
     project_with_relations = await Project(db_engine).get_with_relations(
-        uuid=project.uuid, include=["account", "tasks"]
+        uuid=project.uuid,
+        include=["account", "tasks"],
+        claims={"account_id": account.uuid},
     )
     assert project_with_relations.account.uuid == account.uuid
     assert len(project_with_relations.tasks) == 1
     assert project_with_relations.tasks[0].uuid == task.uuid
 
     # Test cascade delete
-    await Account(db_engine).delete_with_relations(uuid=account.uuid)
+    await Account(db_engine).delete_with_relations(
+        uuid=account.uuid, claims={"account_id": account.uuid}
+    )
 
     # Verify everything is deleted
-    deleted_project = await Project(db_engine).get(uuid=project.uuid)
-    deleted_task = await Task(db_engine).get(uuid=task.uuid)
+    deleted_project = await Project(db_engine).get(
+        uuid=project.uuid, claims={"account_id": account.uuid}
+    )
+    deleted_task = await Task(db_engine).get(
+        uuid=task.uuid, claims={"account_id": account.uuid}
+    )
     assert deleted_project is None
     assert deleted_task is None
 
@@ -187,6 +272,28 @@ class TestOwnership:
         """Create claims without account_id."""
         return {"user_id": "user_123"}
 
+    async def test_create_top_level_without_claims(self, db_engine):
+        """Test creating a top-level model without claims."""
+        controller = Account(db_engine)
+        data = {"name": "Test Account"}
+
+        instance = await controller.create(data, claims=None)
+        assert instance.name == "Test Account"
+        assert instance.uuid
+
+    async def test_create_child_without_claims(self, db_engine):
+        """Test creating a child model without claims."""
+        controller = Project(db_engine)
+        data = {"name": "Test Project", "account_id": "test_acc_123"}
+
+        with pytest.raises(HTTPException) as exc_info:
+            await controller.create(data, claims=None)
+        assert exc_info.value.status_code == 403
+        assert (
+            "Claims must be provided when ownership rule is set and allow_public is False"
+            in str(exc_info.value.detail)
+        )
+
     async def test_create_with_ownership(self, db_engine, account_claims):
         """Test creating a record with ownership."""
         controller = Project(db_engine)
@@ -196,15 +303,28 @@ class TestOwnership:
         assert instance.name == "Test project"
         assert instance.account_id == account_claims["account_id"]
 
-    async def test_create_without_claims(self, db_engine, no_account_claims):
-        """Test creating a record without required claims."""
+    async def test_create_without_claims_no_parent(self, db_engine):
+        """
+        Test creating a record that has no parent without required claims.
+        Record with no parent can not be checked for ownership upon creation.
+        """
         controller = Account(db_engine)
         data = {"name": "Test Account"}
+        account = await controller.create(data, claims=None)
+        assert account.uuid
+
+    async def test_create_without_claims(self, db_engine, no_account_claims):
+        """Test creating a record without required claims."""
+        controller = Project(db_engine)
+        data = {"name": "Test Project", "account_id": "test_acc_123"}
 
         with pytest.raises(HTTPException) as exc_info:
-            await controller.create(data, claims=no_account_claims)
+            await controller.create(data, claims=None)
         assert exc_info.value.status_code == 403
-        assert "Missing required claim: account_id" in str(exc_info.value.detail)
+        assert (
+            "Claims must be provided when ownership rule is set and allow_public is False"
+            in str(exc_info.value.detail)
+        )
 
     async def test_get_with_ownership(self, db_engine, account_claims):
         """Test getting a record owned by the user."""
@@ -362,3 +482,63 @@ class TestOwnership:
             await controller.create(data, claims=account_claims)
         assert exc_info.value.status_code == 403
         assert "Invalid account_id" in str(exc_info.value.detail)
+
+    async def test_create_with_public_access(self, db_engine, account):
+        """Test creating a record with public access enabled."""
+        controller = PublicController(db_engine)
+        data = {"name": "Test Public Item", "account_id": account.uuid}
+
+        instance = await controller.create(data, claims=None)
+        assert instance.name == "Test Public Item"
+
+    async def test_get_with_public_access(self, db_engine, account):
+        """Test getting a record with public access enabled."""
+        controller = PublicController(db_engine)
+        data = {"name": "Test Public Item", "account_id": account.uuid}
+
+        # Create a record
+        instance = await controller.create(data, claims=None)
+
+        # Get the record without claims
+        retrieved = await controller.get(instance.uuid, claims=None)
+        assert retrieved is not None
+        assert retrieved.uuid == instance.uuid
+
+    async def test_list_with_public_access(self, db_engine, account):
+        """Test listing records with public access enabled."""
+        controller = PublicController(db_engine)
+        data = {"name": "Test Public Item", "account_id": account.uuid}
+
+        # Create a record
+        await controller.create(data, claims=None)
+
+        # List records without claims
+        result = await controller.list(claims=None)
+        assert len(result["items"]) == 1
+        assert result["items"][0].name == "Test Public Item"
+
+    async def test_update_with_public_access(self, db_engine, account):
+        """Test updating a record with public access enabled."""
+        controller = PublicController(db_engine)
+        data = {"name": "Test Public Item", "account_id": account.uuid}
+
+        # Create a record
+        instance = await controller.create(data, claims=None)
+
+        # Update the record without claims
+        updated = await controller.update(
+            instance.uuid, {"name": "Updated Item"}, claims=None
+        )
+        assert updated.name == "Updated Item"
+
+    async def test_delete_with_public_access(self, db_engine, account):
+        """Test deleting a record with public access enabled."""
+        controller = PublicController(db_engine)
+        data = {"name": "Test Public Item", "account_id": account.uuid}
+
+        # Create a record
+        instance = await controller.create(data, claims=None)
+
+        # Delete the record without claims
+        deleted = await controller.delete(instance.uuid, claims=None)
+        assert deleted.deleted is True
