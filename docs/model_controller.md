@@ -112,6 +112,71 @@ user = await User(db_engine).update(
 user = await User(db_engine).delete(uuid="user_123")
 ```
 
+## Hooks
+
+The ModelController provides hooks that can be overridden to add custom behavior after create and update operations.
+
+### After Create Hook
+
+The `after_create` hook is called after a model is created and saved to the database. This is useful for:
+- Computing derived fields
+- Setting up related data
+- Triggering notifications
+- Performing post-creation validations
+
+Example:
+```python
+class RoleController(ModelController):
+    model = RoleModel
+    schema_create = RoleCreate
+    schema_update = RoleUpdate
+
+    async def after_create(self, obj: RoleModel) -> RoleModel:
+        """After create hook to compute permission names."""
+        obj.permission_names = [
+            await self.db_engine.find_one(
+                PermissionModel, PermissionModel.uuid == permission
+            ).name
+            for permission in obj.permissions
+        ]
+        return obj
+```
+
+### After Update Hook
+
+The `after_update` hook is called after a model is updated and saved to the database. This is useful for:
+- Updating derived fields
+- Maintaining data consistency
+- Triggering notifications
+- Performing post-update validations
+
+Example:
+```python
+class RoleController(ModelController):
+    model = RoleModel
+    schema_create = RoleCreate
+    schema_update = RoleUpdate
+
+    async def after_update(self, obj: RoleModel) -> RoleModel:
+        """After update hook to recompute permission names."""
+        obj.permission_names = [
+            await self.db_engine.find_one(
+                PermissionModel, PermissionModel.uuid == permission
+            ).name
+            for permission in obj.permissions
+        ]
+        return obj
+```
+
+### Hook Best Practices
+
+1. **Return the Object**: Always return the modified object from the hook
+2. **Async Operations**: Use async/await for database operations in hooks
+3. **Error Handling**: Handle potential errors in hooks gracefully
+4. **Performance**: Keep hooks lightweight to avoid impacting response times
+5. **Idempotency**: Design hooks to be idempotent when possible
+6. **Documentation**: Document the purpose and behavior of hooks
+
 ## Relationships
 
 ### Define Relationships

@@ -117,7 +117,13 @@ class ModelController:
                         )
 
         model = self.model(**data_dict)
-        return await self.db_engine.save(model)
+        model = await self.db_engine.save(model)
+
+        # Call after_create hook if implemented
+        if hasattr(self, "after_create"):
+            model = await self.after_create(model)
+
+        return model
 
     async def update(
         self, uuid: str, data: dict, claims: Optional[Dict[str, Any]] = None
@@ -132,7 +138,41 @@ class ModelController:
         for field in data.model_dump(exclude_unset=True):
             setattr(model, field, data.model_dump()[field])
         model.updated_at = datetime_now_sec()
-        return await self.db_engine.save(model)
+        model = await self.db_engine.save(model)
+
+        # Call after_update hook if implemented
+        if hasattr(self, "after_update"):
+            model = await self.after_update(model)
+
+        return model
+
+    async def after_create(self, obj: BaseModel) -> BaseModel:
+        """Hook called after creating a model.
+
+        Override this method in your controller to add custom behavior after creation.
+        The method should return the modified object.
+
+        Args:
+            obj: The created model instance
+
+        Returns:
+            The modified model instance
+        """
+        return obj
+
+    async def after_update(self, obj: BaseModel) -> BaseModel:
+        """Hook called after updating a model.
+
+        Override this method in your controller to add custom behavior after update.
+        The method should return the modified object.
+
+        Args:
+            obj: The updated model instance
+
+        Returns:
+            The modified model instance
+        """
+        return obj
 
     async def get(
         self,

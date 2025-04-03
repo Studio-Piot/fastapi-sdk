@@ -55,21 +55,22 @@ The middleware parameters are:
 The Route Controller requires a database connection. Here's an example using SQLAlchemy:
 
 ```python
-from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
-from sqlalchemy.orm import sessionmaker
+"""Create a database instance to be used as a dependency."""
 
-# Create async engine
-engine = create_async_engine("postgresql+asyncpg://user:password@localhost/dbname")
+from motor.motor_asyncio import AsyncIOMotorClient
+from odmantic import AIOEngine
 
-# Create async session factory
-AsyncSessionLocal = sessionmaker(
-    engine, class_=AsyncSession, expire_on_commit=False
-)
+from fauthy.config import settings
 
-# Database dependency
-async def get_db():
-    async with AsyncSessionLocal() as session:
-        yield session
+
+async def get_db_engine():
+    """Create a new MongoDB connection to be used as dependency."""
+    client = AsyncIOMotorClient(settings.MONGO_DATABASE_URI)
+    db_engine = AIOEngine(client=client, database=settings.MONGO_DATABASE_NAME)
+    try:
+        yield db_engine
+    finally:
+        client.close()
 ```
 
 ## Usage
@@ -138,7 +139,8 @@ Create a Route Controller instance and include it in your FastAPI app:
 
 ```python
 from fastapi_sdk.controllers.route import RouteController
-from fastapi_sdk.utils.schema import BaseResponsePaginated
+from fastapi_sdk.tests.controllers import Account as AccountController
+from fastapi_sdk.tests.schemas import AccountResponse, AccountResponsePaginated, AccountCreate, AccountUpdate
 
 # Create route controller
 account_routes = RouteController(
@@ -147,7 +149,7 @@ account_routes = RouteController(
     controller=AccountController,
     get_db=get_db,
     schema_response=AccountResponse,
-    schema_response_paginated=BaseResponsePaginated[AccountResponse],
+    schema_response_paginated=AccountResponsePaginated,
     schema_create=AccountCreate,
     schema_update=AccountUpdate,
 )
