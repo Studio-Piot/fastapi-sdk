@@ -39,7 +39,7 @@ app.add_middleware(
     AuthMiddleware,
     public_routes=settings.PUBLIC_ROUTES,  # Routes that don't require auth
     auth_issuer=settings.AUTH_ISSUER,  # Your authentication server URL
-    auth_client_id=settings.FAUTHY_CLIENT_ID,  # Your client ID for authentication
+    auth_client_id=settings.AUTH_CLIENT_ID,  # Your client ID for authentication
     env=settings.ENVIRONMENT,  # Environment: "development" or "production"
     test_private_key_path=settings.TEST_PRIVATE_KEY_PATH,  # Path to private key for development
     test_public_key_path=settings.TEST_PUBLIC_KEY_PATH,

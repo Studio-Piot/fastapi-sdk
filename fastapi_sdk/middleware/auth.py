@@ -3,6 +3,7 @@
 This module provides middleware to validate JWT tokens from Authorization header.
 """
 
+import re
 from typing import List, Optional
 
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -45,6 +46,13 @@ class AuthMiddleware(BaseHTTPMiddleware):
         self.test_private_key_path = test_private_key_path
         self.test_public_key_path = test_public_key_path
 
+        # Compile regex patterns for public routes
+        self.public_route_patterns = []
+        for route in public_routes:
+            # Convert glob pattern to regex pattern
+            pattern = route.replace(".", r"\.").replace("*", ".*")
+            self.public_route_patterns.append(re.compile(f"^{pattern}$"))
+
     async def dispatch(self, request: Request, call_next):
         """Process the request and validate the JWT token.
 
@@ -55,8 +63,11 @@ class AuthMiddleware(BaseHTTPMiddleware):
         Returns:
             The response from the next handler or an error response
         """
-        if request.url.path in self.public_routes:
-            return await call_next(request)  # Allow public routes
+        # Check if the path matches any public route pattern
+        path = request.url.path
+        for pattern in self.public_route_patterns:
+            if pattern.match(path):
+                return await call_next(request)  # Allow public routes
 
         auth_header = request.headers.get("Authorization")
         if not auth_header or not auth_header.startswith("Bearer "):

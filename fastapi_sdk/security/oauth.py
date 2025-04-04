@@ -75,7 +75,19 @@ def decode_access_token(
             key = JsonWebKey.import_key(json.loads(jwk))
             claims = jwt.decode(token, key)
 
-        claims.validate()  # Ensures expiration and validity checks
+        # Validate expiration and other standard claims
+        claims.validate()
+
+        # Check if issuer matches auth_issuer
+        if claims.get("iss") != auth_issuer:
+            logger.error("Token issuer does not match auth_issuer")
+            raise ValueError("Token issuer does not match auth_issuer")
+
+        # Check if tenant_id matches auth_client_id
+        if claims.get("tenant_id") != auth_client_id:
+            logger.error("Token tenant_id does not match auth_client_id")
+            raise ValueError("Token tenant_id does not match auth_client_id")
+
         return claims
     except ExpiredTokenError as e:
         logger.error("Token has expired")

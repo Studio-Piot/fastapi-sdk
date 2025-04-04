@@ -33,13 +33,61 @@ A powerful SDK for building FastAPI applications with built-in authentication, a
 - [Route Controller Documentation](docs/route_controller.md) - Learn how to create CRUD routes with authentication and permissions
 - [Model Controller Documentation](docs/model_controller.md) - Understand how to implement database operations and relationships
 
-## Installation
-
-```bash
-pip install fastapi-sdk
-```
 
 ## Quick Start
+
+Using UV, start a new project from within the folder you wish to create it.
+
+> The project requires Python 3.13 or above.
+
+```bash
+uv init
+uv venv
+source .venv/bin/activaye
+uv add fastapi-sdk
+```
+
+In order to test authentication, we need a set of asymmetric encryption keys for test access tokens. Generate the two keys using the command below:
+
+```
+openssl genrsa -des3 -out test_private_encrypted.pem 2048
+openssl rsa -pubout -in test_private_encrypted.pem -out test_public_key.pem
+openssl rsa -in test_private_encrypted.pem -out test_private_key.pem -outform PEM
+```
+
+This will create three keys:
+
+- `test_private_encrypted.pem` (keep safe somewhere)
+- `test_private_key.pem`
+- `test_public_key.pem`
+
+We will use the `test_private_key.pem` key to encrypt our JWT tokens and `test_public_key.pem` to decrypt them (asymmetric encryption).
+
+> Those test keys can added to the repository for ease of setup and running CI/CD testing.
+
+Add the value of each key to your environment:
+
+```bash
+# .env.local
+export AUTH_PRIVATE_KEY="test_private_key.pem"
+export AUTH_PUBLIC_KEY="test_public_key.pem"
+```
+
+For the API to work in the real world, you will need settings for Fauthy authentication. Create a new tenant and use the `client_id` which will be required to get the public JWKs.
+
+```bash
+# .env.local
+AUTH_ISSUER="https://identity.piot.co.uk"
+AUTH_CLIENT_ID="test_client_id" # Replace with real client_id for production
+```
+
+Then some api settings:
+
+```bash
+# .env.local
+PUBLIC_ROUTES="/public/*,/other"
+ENVIRONMENT="development" # Replace with production when deploying to live server
+```
 
 ```python
 from fastapi import FastAPI
