@@ -77,8 +77,11 @@ def decode_access_token(
 
         # Validate expiration and other standard claims
         claims.validate()
+        print("claims", claims)
 
         # Check if issuer matches auth_issuer
+        print("claims.get('iss')", claims.get("iss"))
+        print("auth_issuer", auth_issuer)
         if claims.get("iss") != auth_issuer:
             logger.error("Token issuer does not match auth_issuer")
             raise ValueError("Token issuer does not match auth_issuer")

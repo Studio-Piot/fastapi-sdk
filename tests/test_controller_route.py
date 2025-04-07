@@ -466,6 +466,8 @@ class TestPermissions:
             test_private_key_path=settings.TEST_PRIVATE_KEY_PATH,
             data={
                 "sub": "test_user",
+                "tenant_id": settings.AUTH_CLIENT_ID,
+                "iss": settings.AUTH_ISSUER,
                 "account_id": account.uuid,
                 "roles": ["user"],
                 "permissions": ["project:read"],
@@ -481,6 +483,8 @@ class TestPermissions:
             test_private_key_path=settings.TEST_PRIVATE_KEY_PATH,
             data={
                 "sub": "test_user",
+                "tenant_id": settings.AUTH_CLIENT_ID,
+                "iss": settings.AUTH_ISSUER,
                 "account_id": account.uuid,
                 "roles": [],
                 "permissions": [],
@@ -496,6 +500,8 @@ class TestPermissions:
             test_private_key_path=settings.TEST_PRIVATE_KEY_PATH,
             data={
                 "sub": "test_user",
+                "tenant_id": settings.AUTH_CLIENT_ID,
+                "iss": settings.AUTH_ISSUER,
                 "account_id": account.uuid,
                 "roles": ["superuser"],
                 "permissions": [],

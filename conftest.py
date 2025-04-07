@@ -65,8 +65,10 @@ def mock_jwt_token(account):
         test_private_key_path=settings.TEST_PRIVATE_KEY_PATH,
         data={
             "sub": "test_user",
+            "tenant_id": settings.AUTH_CLIENT_ID,
             "account_id": account.uuid,
             "roles": ["admin"],
+            "iss": settings.AUTH_ISSUER,
             "permissions": [
                 "account:create",
                 "account:read",
@@ -99,6 +101,8 @@ def mock_jwt_token_no_account_id():
         test_private_key_path=settings.TEST_PRIVATE_KEY_PATH,
         data={
             "sub": "test_user",
+            "tenant_id": settings.AUTH_CLIENT_ID,
+            "iss": settings.AUTH_ISSUER,
             "roles": ["admin"],
             "permissions": [
                 "account:create",
@@ -132,7 +136,9 @@ def different_mock_jwt_token():
         test_private_key_path=settings.TEST_PRIVATE_KEY_PATH,
         data={
             "sub": "test_user",
+            "tenant_id": settings.AUTH_CLIENT_ID,
             "account_id": "acc_456",
+            "iss": settings.AUTH_ISSUER,
             "roles": ["admin"],
             "permissions": [
                 "account:create",
