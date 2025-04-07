@@ -69,24 +69,37 @@ Add the value of each key to your environment:
 
 ```bash
 # .env.local
-export AUTH_PRIVATE_KEY="test_private_key.pem"
-export AUTH_PUBLIC_KEY="test_public_key.pem"
+export TEST_PRIVATE_KEY_PATH="test_private_key.pem"
+export TEST_PUBLIC_KEY_PATH="test_public_key.pem"
 ```
 
 For the API to work in the real world, you will need settings for Fauthy authentication. Create a new tenant and use the `client_id` which will be required to get the public JWKs.
 
 ```bash
 # .env.local
-AUTH_ISSUER="https://identity.piot.co.uk"
-AUTH_CLIENT_ID="test_client_id" # Replace with real client_id for production
+export AUTH_ISSUER="https://identity.piot.co.uk"
+export AUTH_CLIENT_ID="test_client_id" # Replace with real client_id for production
 ```
 
 Then some api settings:
 
 ```bash
 # .env.local
-PUBLIC_ROUTES="/public/*,/other"
-ENVIRONMENT="development" # Replace with production when deploying to live server
+export PUBLIC_ROUTES="/public/*,/other"
+export ENVIRONMENT="development" # Replace with production when deploying to live server
+```
+
+A full `.env.local` complete included the MongoDB connection string:
+
+```bash
+export AUTH_PRIVATE_KEY="test_private_key.pem"
+export AUTH_PUBLIC_KEY="test_public_key.pem"
+export AUTH_ISSUER="https://identity.piot.co.uk"
+export AUTH_CLIENT_ID="test_client_id" # Replace with real client_id for production
+export PUBLIC_ROUTES="/public/*,/other"
+export ENVIRONMENT="development" # Replace with production when deploying to live server
+export MONGO_DATABASE_URI="mongodb://localhost:27017"
+export MONGO_DATABASE_NAME="fastapi_sdk_test"
 ```
 
 ```python

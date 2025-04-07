@@ -112,6 +112,37 @@ user = await User(db_engine).update(
 user = await User(db_engine).delete(uuid="user_123")
 ```
 
+### Undelete
+```python
+user = await User(db_engine).undelete(uuid="user_123")
+```
+
+### Get with Relations
+```python
+# Get user with related projects
+user = await User(db_engine).get_with_relations(
+    uuid="user_123",
+    include=["projects"]
+)
+```
+
+### Delete with Relations
+```python
+# Delete user and related projects
+result = await User(db_engine).delete_with_relations(
+    uuid="user_123"
+)
+```
+
+### List Related
+```python
+# List all projects for a user
+projects = await Project(db_engine).list_related(
+    foreign_key="user_id",
+    value="user_123"
+)
+```
+
 ## Hooks
 
 The ModelController provides hooks that can be overridden to add custom behavior after create and update operations.
@@ -445,4 +476,153 @@ class PublicProjectController(ModelController):
 1. **Consistent Field Names**: Use consistent field names between claims and models
 2. **Public Access**: Only enable public access when necessary
 3. **Error Messages**: Provide clear error messages for ownership violations
-4. **Testing**: Test both owned and non-owned access scenarios 
+4. **Testing**: Test both owned and non-owned access scenarios
+
+## Complete API Reference
+
+### Core Methods
+
+#### `create(data: dict, claims: Optional[Dict[str, Any]] = None) -> BaseModel`
+Creates a new model instance with the provided data.
+
+**Parameters:**
+- `data`: Dictionary containing model attributes
+- `claims`: Optional user claims for ownership verification
+
+**Returns:**
+- The created model instance
+
+#### `get(uuid: str, claims: Optional[Dict[str, Any]] = None, include_deleted: bool = False) -> Optional[BaseModel]`
+Retrieves a single model by UUID.
+
+**Parameters:**
+- `uuid`: The UUID of the model to retrieve
+- `claims`: Optional user claims for ownership verification
+- `include_deleted`: Whether to include deleted models
+
+**Returns:**
+- The model instance or None if not found
+
+#### `update(uuid: str, data: dict, claims: Optional[Dict[str, Any]] = None) -> Optional[BaseModel]`
+Updates an existing model.
+
+**Parameters:**
+- `uuid`: The UUID of the model to update
+- `data`: Dictionary containing fields to update
+- `claims`: Optional user claims for ownership verification
+
+**Returns:**
+- The updated model instance or None if not found
+
+#### `delete(uuid: str, claims: Optional[Dict[str, Any]] = None) -> Optional[BaseModel]`
+Soft deletes a model by setting the `deleted` flag to True.
+
+**Parameters:**
+- `uuid`: The UUID of the model to delete
+- `claims`: Optional user claims for ownership verification
+
+**Returns:**
+- The deleted model instance or None if not found
+
+#### `undelete(uuid: str, claims: Optional[Dict[str, Any]] = None) -> Optional[BaseModel]`
+Undeletes a model by setting the `deleted` flag to False.
+
+**Parameters:**
+- `uuid`: The UUID of the model to undelete
+- `claims`: Optional user claims for ownership verification
+
+**Returns:**
+- The undeleted model instance or None if not found
+
+#### `list(page: int = 0, query: Optional[List[dict]] = None, order_by: Optional[dict] = None, claims: Optional[Dict[str, Any]] = None) -> Dict[str, Any]`
+Lists models with pagination and filtering.
+
+**Parameters:**
+- `page`: Page number (0-based)
+- `query`: List of query dictionaries for filtering
+- `order_by`: Dictionary for sorting (e.g., `{"created_at": -1}`)
+- `claims`: Optional user claims for ownership verification
+
+**Returns:**
+- Dictionary containing items, total count, page info, etc.
+
+### Relationship Methods
+
+#### `get_with_relations(uuid: str, include: Optional[List[str]] = None, claims: Optional[Dict[str, Any]] = None) -> BaseModel`
+Retrieves a model with its related models.
+
+**Parameters:**
+- `uuid`: The UUID of the model to retrieve
+- `include`: List of relationship names to include
+- `claims`: Optional user claims for ownership verification
+
+**Returns:**
+- The model with related models attached as attributes
+
+#### `delete_with_relations(uuid: str, claims: Optional[Dict[str, Any]] = None) -> BaseModel`
+Deletes a model and its related models if cascade_delete is enabled.
+
+**Parameters:**
+- `uuid`: The UUID of the model to delete
+- `claims`: Optional user claims for ownership verification
+
+**Returns:**
+- The deleted model instance
+
+#### `list_related(foreign_key: str, value: str, claims: Optional[Dict[str, Any]] = None) -> List[BaseModel]`
+Lists models related to another model by foreign key.
+
+**Parameters:**
+- `foreign_key`: The foreign key field name
+- `value`: The value to match against
+- `claims`: Optional user claims for ownership verification
+
+**Returns:**
+- List of related model instances
+
+### Hook Methods
+
+#### `after_create(obj: BaseModel) -> BaseModel`
+Hook called after creating a model.
+
+**Parameters:**
+- `obj`: The created model instance
+
+**Returns:**
+- The modified model instance
+
+#### `after_update(obj: BaseModel) -> BaseModel`
+Hook called after updating a model.
+
+**Parameters:**
+- `obj`: The updated model instance
+
+**Returns:**
+- The modified model instance
+
+### Utility Methods
+
+#### `_get_ownership_filter(claims: Dict[str, Any]) -> Optional[Dict[str, Any]]`
+Gets the ownership filter based on user claims.
+
+**Parameters:**
+- `claims`: User claims from JWT token
+
+**Returns:**
+- Filter dictionary or None if no ownership rule is set
+
+#### `register_controller(name: str, controller_class: Type["ModelController"]) -> None`
+Registers a controller class in the controller registry.
+
+**Parameters:**
+- `name`: Name to register the controller under
+- `controller_class`: The controller class to register
+
+#### `get_controller(name: str) -> Type["ModelController"]`
+Gets a controller class from the registry.
+
+**Parameters:**
+- `name`: Name of the controller to retrieve
+
+**Returns:**
+- The controller class 
