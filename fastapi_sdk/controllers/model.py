@@ -73,7 +73,7 @@ class ModelController:
             return None
 
         # Superuser has full access
-        if claims.get("role") == "superuser":
+        if "superuser" in claims.get("roles", []):
             return None
 
         claim_value = claims.get(self.ownership_rule.claim_field)

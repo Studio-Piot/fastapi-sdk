@@ -117,7 +117,7 @@ async def test_model_controller(db_engine: AgnosticDatabase):
     assert restored_account.deleted is False
 
     # Test superuser access
-    superuser_claims = {"account_id": account_2.uuid, "role": "superuser"}
+    superuser_claims = {"account_id": account_2.uuid, "roles": ["superuser"]}
 
     # Superuser can list all accounts
     all_accounts = await Account(db_engine).list(claims=superuser_claims)
@@ -158,7 +158,7 @@ async def test_list_options(db_engine: AgnosticDatabase):
 
     # Default listing
     accounts = await Account(db_engine).list(
-        claims={"account_id": account_1.uuid, "role": "superuser"}
+        claims={"account_id": account_1.uuid, "roles": ["superuser"]}
     )
     assert len(accounts["items"]) == 2
     assert accounts["total"] == 2
@@ -167,7 +167,7 @@ async def test_list_options(db_engine: AgnosticDatabase):
 
     # List with page 2 (Page 1 is the same as default, page 0)
     accounts = await Account(db_engine).list(
-        page=2, claims={"account_id": account_1.uuid, "role": "superuser"}
+        page=2, claims={"account_id": account_1.uuid, "roles": ["superuser"]}
     )
     assert len(accounts["items"]) == 0
     assert accounts["total"] == 2
@@ -177,7 +177,7 @@ async def test_list_options(db_engine: AgnosticDatabase):
     # List with query
     accounts = await Account(db_engine).list(
         query=[{"name": "Account 1"}],
-        claims={"account_id": account_1.uuid, "role": "superuser"},
+        claims={"account_id": account_1.uuid, "roles": ["superuser"]},
     )
     assert len(accounts["items"]) == 1
     assert accounts["items"][0].uuid == account_1.uuid
@@ -188,7 +188,7 @@ async def test_list_options(db_engine: AgnosticDatabase):
     # List with order_by
     accounts = await Account(db_engine).list(
         order_by={"name": -1},
-        claims={"account_id": account_1.uuid, "role": "superuser"},
+        claims={"account_id": account_1.uuid, "roles": ["superuser"]},
     )
     assert len(accounts["items"]) == 2
     assert accounts["items"][0].uuid == account_2.uuid
