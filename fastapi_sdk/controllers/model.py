@@ -245,9 +245,9 @@ class ModelController:
     ) -> List[BaseModel]:
         """List models."""
         # Get the collection
-        collection_name = self.model.model_config[
-            "collection"
-        ] or self.model.__name__.lower().replace("model", "")
+        collection_name = (
+            self.model.model_config.get("collection") or self.model.__collection__
+        )
         _collection = self.db_engine.database[collection_name]
 
         # Create a pipeline for aggregation
@@ -268,7 +268,6 @@ class ModelController:
                 )
             if claims:
                 ownership_filter = self._get_ownership_filter(claims)
-                print("ownership_filter", ownership_filter)
                 if ownership_filter:
                     _query.update(ownership_filter)
 
