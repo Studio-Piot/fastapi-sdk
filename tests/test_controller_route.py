@@ -177,7 +177,6 @@ class TestTaskRoutes:
             headers=auth_headers,
             json={"description": "Updated description"},
         )
-        print(response.json())
         assert response.status_code == 200
         data = response.json()
         assert data["description"] == "Updated description"
