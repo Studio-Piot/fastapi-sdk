@@ -242,8 +242,17 @@ class ModelController:
         query: Optional[List[dict]] = None,
         order_by: Optional[dict] = None,
         claims: Optional[Dict[str, Any]] = None,
+        include: Optional[List[str]] = None,
     ) -> List[BaseModel]:
-        """List models."""
+        """List models.
+
+        Args:
+            page: The page number (0-based)
+            query: Optional query filters
+            order_by: Optional sorting criteria
+            claims: Optional claims for ownership verification
+            include: Optional list of related objects to include
+        """
         # Get the collection
         collection_name = (
             self.model.model_config.get("collection") or self.model.__collection__
@@ -292,12 +301,45 @@ class ModelController:
         if total % self.n_per_page > 0:
             pages += 1
 
+        # Convert items to models
+        models = [self.model.model_validate_doc(item) for item in items]
+
+        # Load related objects if include is specified
+        if include:
+            for model in models:
+                for relation in include:
+                    if relation not in self.relationships:
+                        continue
+
+                    rel_info = self.relationships[relation]
+                    rel_controller_name = rel_info["controller"]
+                    rel_type = rel_info["type"]
+                    foreign_key = rel_info.get("foreign_key")
+
+                    # Get the controller class from the registry
+                    rel_controller_class = self.get_controller(rel_controller_name)
+
+                    if rel_type == "one_to_many":
+                        # Fetch related items where foreign_key matches this model's uuid
+                        related_items = await rel_controller_class(
+                            self.db_engine
+                        ).list_related(
+                            foreign_key=foreign_key, value=model.uuid, claims=claims
+                        )
+                        setattr(model, relation, related_items)
+                    elif rel_type == "many_to_one":
+                        # Fetch single related item
+                        related_item = await rel_controller_class(self.db_engine).get(
+                            uuid=getattr(model, foreign_key), claims=claims
+                        )
+                        setattr(model, relation, related_item)
+
         return {
-            "items": [self.model.model_validate_doc(item) for item in items],
+            "items": models,
             "total": total,
             "page": page,
             "pages": pages,
-            "size": len(items),
+            "size": len(models),
         }
 
     async def list_related(

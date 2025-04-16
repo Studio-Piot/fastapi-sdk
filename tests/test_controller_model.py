@@ -542,3 +542,69 @@ class TestOwnership:
         # Delete the record without claims
         deleted = await controller.delete(instance.uuid, claims=None)
         assert deleted.deleted is True
+
+
+@pytest.mark.asyncio
+async def test_list_with_relations(db_engine: AgnosticDatabase):
+    """Test listing models with included relations."""
+
+    # Create test data
+    account = await Account(db_engine).create({"name": "Test Account"})
+    account_claims = {"account_id": account.uuid}
+    project = await Project(db_engine).create(
+        {"name": "Test Project", "account_id": account.uuid},
+        claims=account_claims,
+    )
+    task = await Task(db_engine).create(
+        {
+            "name": "Test Task",
+            "description": "Test Task Description",
+            "account_id": account.uuid,
+            "project_id": project.uuid,
+        },
+        claims=account_claims,
+    )
+
+    # Test listing accounts with projects included
+    result = await Account(db_engine).list(include=["projects"], claims=account_claims)
+    assert result["total"] >= 1
+    account_with_projects = next(
+        (a for a in result["items"] if a.uuid == account.uuid), None
+    )
+    assert account_with_projects is not None
+    assert hasattr(account_with_projects, "projects")
+    assert len(account_with_projects.projects) >= 1
+    assert any(p.uuid == project.uuid for p in account_with_projects.projects)
+
+    # Test listing projects with tasks included
+    result = await Project(db_engine).list(include=["tasks"], claims=account_claims)
+    assert result["total"] >= 1
+    project_with_tasks = next(
+        (p for p in result["items"] if p.uuid == project.uuid), None
+    )
+    assert project_with_tasks is not None
+    assert hasattr(project_with_tasks, "tasks")
+    assert len(project_with_tasks.tasks) >= 1
+    assert any(t.uuid == task.uuid for t in project_with_tasks.tasks)
+
+    # Test listing with multiple relations
+    result = await Project(db_engine).list(
+        include=["tasks", "account"], claims=account_claims
+    )
+    assert result["total"] >= 1
+    project_with_relations = next(
+        (p for p in result["items"] if p.uuid == project.uuid), None
+    )
+    assert project_with_relations is not None
+    assert hasattr(project_with_relations, "account")
+    assert hasattr(project_with_relations, "tasks")
+    assert len(project_with_relations.tasks) >= 1
+    assert any(t.uuid == task.uuid for t in project_with_relations.tasks)
+
+    # Test listing with non-existent relation
+    result = await Account(db_engine).list(
+        include=["non_existent"], claims=account_claims
+    )
+    assert result["total"] >= 1
+    account = next((a for a in result["items"] if a.uuid == account.uuid), None)
+    assert account is not None
