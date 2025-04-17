@@ -280,6 +280,50 @@ class ModelController:
                 if ownership_filter:
                     _query.update(ownership_filter)
 
+        # Append pipeline stages for related objects
+        if include:
+            for relation in include:
+                if relation not in self.relationships:
+                    continue
+
+                rel_info = self.relationships[relation]
+                rel_controller_name = rel_info["controller"]
+                rel_type = rel_info["type"]
+                foreign_key = rel_info.get("foreign_key")
+
+                # Get the controller class from the registry
+                rel_controller_class = self.get_controller(rel_controller_name)
+
+                if rel_type == "one_to_many":
+                    _pipeline.append(
+                        {
+                            "$lookup": {
+                                "from": rel_controller_class.model.model_config.get(
+                                    "collection"
+                                )
+                                or rel_controller_class.model.__collection__,
+                                "localField": "uuid",
+                                "foreignField": foreign_key,
+                                "as": relation,
+                            }
+                        }
+                    )
+                elif rel_type == "many_to_one":
+                    _pipeline.append(
+                        {
+                            "$lookup": {
+                                "from": rel_controller_class.model.model_config.get(
+                                    "collection"
+                                )
+                                or rel_controller_class.model.__collection__,
+                                "localField": foreign_key,
+                                "foreignField": "uuid",
+                                "as": relation,
+                            }
+                        }
+                    )
+                    _pipeline.append({"$unwind": f"${relation}"})
+
         # Sorting, default by created_at
         _sort = order_by if order_by else {"created_at": -1}
 
@@ -303,36 +347,6 @@ class ModelController:
 
         # Convert items to models
         models = [self.model.model_validate_doc(item) for item in items]
-
-        # Load related objects if include is specified
-        if include:
-            for model in models:
-                for relation in include:
-                    if relation not in self.relationships:
-                        continue
-
-                    rel_info = self.relationships[relation]
-                    rel_controller_name = rel_info["controller"]
-                    rel_type = rel_info["type"]
-                    foreign_key = rel_info.get("foreign_key")
-
-                    # Get the controller class from the registry
-                    rel_controller_class = self.get_controller(rel_controller_name)
-
-                    if rel_type == "one_to_many":
-                        # Fetch related items where foreign_key matches this model's uuid
-                        related_items = await rel_controller_class(
-                            self.db_engine
-                        ).list_related(
-                            foreign_key=foreign_key, value=model.uuid, claims=claims
-                        )
-                        setattr(model, relation, related_items)
-                    elif rel_type == "many_to_one":
-                        # Fetch single related item
-                        related_item = await rel_controller_class(self.db_engine).get(
-                            uuid=getattr(model, foreign_key), claims=claims
-                        )
-                        setattr(model, relation, related_item)
 
         return {
             "items": models,

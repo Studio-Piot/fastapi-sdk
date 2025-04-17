@@ -112,13 +112,38 @@ class RouteController:
         async def get_route(
             request: Request,
             resource_id: str,
+            include: List[str] = Query(default=None),
             db: Any = Depends(self.get_db),
         ):
-            """Get a resource by ID (requires authentication)."""
-            instance = await self.controller(db).get(
-                uuid=resource_id,
-                claims=request.state.claims,
-            )
+            """Get a resource by ID (requires authentication).
+
+            Args:
+                request: The FastAPI request object
+                resource_id: The ID of the resource to get
+                include: Optional list of related objects to include in the response
+                db: The database connection
+
+            Example:
+                # Get an account with its projects included
+                GET /accounts/{account_id}?include=projects
+
+                # Get a project with its tasks included
+                GET /projects/{project_id}?include=tasks
+
+                # Get an account with multiple relations included
+                GET /accounts/{account_id}?include=projects&include=tasks
+            """
+            if include:
+                instance = await self.controller(db).get_with_relations(
+                    uuid=resource_id,
+                    include=include,
+                    claims=request.state.claims,
+                )
+            else:
+                instance = await self.controller(db).get(
+                    uuid=resource_id,
+                    claims=request.state.claims,
+                )
             if not instance:
                 raise HTTPException(status_code=404, detail="Resource not found")
             return self.schema_response(**instance.model_dump())

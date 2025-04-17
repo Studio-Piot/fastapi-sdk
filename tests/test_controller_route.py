@@ -162,6 +162,44 @@ class TestTaskRoutes:
         assert data["uuid"] == task.uuid
         assert data["description"] == task.description
 
+    async def test_get_with_relations(
+        self, client, auth_headers, account, project, task
+    ):
+        """Test getting a resource with included relations."""
+        # Test getting an account with projects included
+        response = client.get(
+            f"/accounts/{account.uuid}?include=projects", headers=auth_headers
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["uuid"] == account.uuid
+        assert "projects" in data
+        assert len(data["projects"]) >= 1
+        assert any(p["uuid"] == project.uuid for p in data["projects"])
+
+        # Test getting a project with tasks and account included
+        response = client.get(
+            f"/projects/{project.uuid}?include=tasks&include=account",
+            headers=auth_headers,
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["uuid"] == project.uuid
+        assert "tasks" in data
+        assert len(data["tasks"]) >= 1
+        assert any(t["uuid"] == task.uuid for t in data["tasks"])
+        assert "account" in data
+        assert data["account"]["uuid"] == account.uuid
+
+        # Test with non-existent relation
+        response = client.get(
+            f"/accounts/{account.uuid}?include=non_existent", headers=auth_headers
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["uuid"] == account.uuid
+        assert "non_existent" not in data
+
     async def test_list_tasks(self, client, auth_headers, task):
         """Test listing tasks."""
         response = client.get("/tasks/", headers=auth_headers)
@@ -176,12 +214,10 @@ class TestTaskRoutes:
         """Test listing resources with included relations."""
         # Test listing accounts with projects included
         response = client.get("/accounts/?include=projects", headers=auth_headers)
-        print("response", response.json())
         assert response.status_code == 200
         data = response.json()
         assert len(data["items"]) >= 1
         account_data = next(a for a in data["items"] if a["uuid"] == account.uuid)
-        # print(account_data)
         assert "projects" in account_data
         assert len(account_data["projects"]) >= 1
         assert any(p["uuid"] == project.uuid for p in account_data["projects"])

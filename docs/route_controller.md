@@ -171,6 +171,84 @@ The Route Controller automatically generates the following endpoints:
 | DELETE | `/accounts/{uuid}` | Soft delete account |
 | GET | `/accounts/deleted/` | List deleted accounts (paginated) |
 
+### Including Related Objects
+
+You can include related objects in both list and get endpoints using the `include` query parameter:
+
+```python
+# List accounts with their projects included
+GET /accounts/?include=projects
+
+# List projecta with multiple relations included
+GET /projects/?include=projects&include=account
+
+# Get a specific account with its projects included
+GET /accounts/{uuid}?include=projects
+```
+
+#### Example Responses
+
+```json
+// GET /accounts/?include=projects
+{
+    "items": [
+        {
+            "uuid": "acc_123",
+            "name": "Account 1",
+            "projects": [
+                {
+                    "uuid": "proj_1",
+                    "name": "Project 1",
+                    "account_id": "acc_123"
+                }
+            ]
+        }
+    ],
+    "total": 1,
+    "page": 0,
+    "pages": 1,
+    "size": 1
+}
+
+// GET /accounts/{uuid}?include=projects
+{
+    "uuid": "acc_123",
+    "name": "Account 1",
+    "projects": [
+        {
+            "uuid": "proj_1",
+            "name": "Project 1",
+            "account_id": "acc_123"
+        }
+    ]
+}
+```
+
+#### Best Practices for Using Include
+
+1. **Performance**
+   - Be mindful of the number of relations you include
+   - Consider implementing pagination for large related collections
+   - Use appropriate indexes on foreign key fields
+
+2. **Error Handling**
+   - Non-existent relations are silently ignored
+   - Invalid relation names are skipped
+   - The response will still include the main object even if relation loading fails
+
+3. **Security**
+   - Relations are filtered based on the same ownership rules as the main object
+   - Users can only access related objects they have permission to view
+
+4. **Caching**
+   - Consider implementing caching for frequently accessed relations
+   - Use appropriate cache invalidation strategies when related objects change
+
+5. **Documentation**
+   - Document available relations in your API documentation
+   - Provide examples of common include patterns
+   - Explain any performance implications of including specific relations
+
 ## Customization
 
 ### Route Selection

@@ -143,6 +143,113 @@ projects = await Project(db_engine).list_related(
 )
 ```
 
+### List with Relations
+```python
+# List users with their projects included
+users = await User(db_engine).list(
+    include=["projects"]  # Include related projects
+)
+
+# List users with multiple relations included
+users = await User(db_engine).list(
+    include=["projects", "tasks"]  # Include both projects and tasks
+)
+
+# List with pagination and relations
+users = await User(db_engine).list(
+    page=1,
+    order_by={"created_at": -1},
+    include=["projects"]
+)
+```
+
+### Get with Relations
+```python
+# Get user with their projects included
+user = await User(db_engine).get_with_relations(
+    uuid="user_123",
+    include=["projects"]  # Include related projects
+)
+
+# Get user with multiple relations included
+user = await User(db_engine).get_with_relations(
+    uuid="user_123",
+    include=["projects", "tasks"]  # Include both projects and tasks
+)
+```
+
+### Response Format with Relations
+
+When using the `include` parameter, the response will include the related objects as nested fields:
+
+```python
+# Example response for list with projects included
+{
+    "items": [
+        {
+            "uuid": "user_123",
+            "name": "John",
+            "email": "john@example.com",
+            "projects": [  # Included projects
+                {
+                    "uuid": "project_1",
+                    "name": "Project 1",
+                    "owner_id": "user_123"
+                },
+                {
+                    "uuid": "project_2",
+                    "name": "Project 2",
+                    "owner_id": "user_123"
+                }
+            ]
+        }
+    ],
+    "total": 1,
+    "page": 0,
+    "pages": 1,
+    "size": 1
+}
+
+# Example response for get with projects included
+{
+    "uuid": "user_123",
+    "name": "John",
+    "email": "john@example.com",
+    "projects": [  # Included projects
+        {
+            "uuid": "project_1",
+            "name": "Project 1",
+            "owner_id": "user_123"
+        },
+        {
+            "uuid": "project_2",
+            "name": "Project 2",
+            "owner_id": "user_123"
+        }
+    ]
+}
+```
+
+### Best Practices for Using Relations
+
+1. **Performance Considerations**
+   - Be mindful of the number of relations you include
+   - Consider using pagination for large related collections
+   - Use indexes on foreign key fields for better performance
+
+2. **Error Handling**
+   - Non-existent relations are silently ignored
+   - Invalid relation names are skipped
+   - The response will still include the main object even if relation loading fails
+
+3. **Ownership and Permissions**
+   - Relations are filtered based on the same ownership rules as the main object
+   - Users can only access related objects they have permission to view
+
+4. **Caching**
+   - Consider implementing caching for frequently accessed relations
+   - Use appropriate cache invalidation strategies when related objects change
+
 ## Hooks
 
 The ModelController provides hooks that can be overridden to add custom behavior after create and update operations.
@@ -625,4 +732,29 @@ Gets a controller class from the registry.
 - `name`: Name of the controller to retrieve
 
 **Returns:**
-- The controller class 
+- The controller class
+
+### Best Practices for Using Relations
+
+1. **Performance Considerations**
+   - Be mindful of the number of relations you include
+   - Consider using pagination for large related collections
+   - Use indexes on foreign key fields for better performance
+
+2. **Error Handling**
+   - Non-existent relations are silently ignored
+   - Invalid relation names are skipped
+   - The response will still include the main object even if relation loading fails
+
+3. **Ownership and Permissions**
+   - Relations are filtered based on the same ownership rules as the main object
+   - Users can only access related objects they have permission to view
+
+4. **Caching**
+   - Consider implementing caching for frequently accessed relations
+   - Use appropriate cache invalidation strategies when related objects change
+
+5. **Documentation**
+   - Document available relations in your API documentation
+   - Provide examples of common include patterns
+   - Explain any performance implications of including specific relations 
