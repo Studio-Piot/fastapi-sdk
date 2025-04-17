@@ -50,7 +50,7 @@ class AccountResponse(AccountBase):
     created_at: datetime
     updated_at: datetime
     deleted: bool
-
+    projects: Optional[List["ProjectResponse"]] = Field(default=None)
     model_config = ConfigDict(from_attributes=True)
 
 
@@ -93,7 +93,8 @@ class ProjectResponse(ProjectBase):
     created_at: datetime
     updated_at: datetime
     deleted: bool
-
+    tasks: Optional[List["TaskResponse"]] = Field(default=None)
+    account: Optional["AccountResponse"] = Field(default=None)
     model_config = ConfigDict(from_attributes=True)
 
 
@@ -141,6 +142,7 @@ class TaskResponse(TaskBase):
     created_at: datetime
     updated_at: datetime
     deleted: bool
+    project: Optional["ProjectResponse"] = Field(default=None)
 
     model_config = ConfigDict(from_attributes=True)
 

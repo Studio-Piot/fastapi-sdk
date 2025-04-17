@@ -170,6 +170,53 @@ class TestTaskRoutes:
         assert len(data["items"]) >= 1
         assert any(t["uuid"] == task.uuid for t in data["items"])
 
+    async def test_list_with_relations(
+        self, client, auth_headers, account, project, task
+    ):
+        """Test listing resources with included relations."""
+        # Test listing accounts with projects included
+        response = client.get("/accounts/?include=projects", headers=auth_headers)
+        print("response", response.json())
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data["items"]) >= 1
+        account_data = next(a for a in data["items"] if a["uuid"] == account.uuid)
+        # print(account_data)
+        assert "projects" in account_data
+        assert len(account_data["projects"]) >= 1
+        assert any(p["uuid"] == project.uuid for p in account_data["projects"])
+
+        # Test listing projects with tasks included
+        response = client.get(
+            "/projects/?include=tasks&include=account", headers=auth_headers
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data["items"]) >= 1
+        project_data = next(p for p in data["items"] if p["uuid"] == project.uuid)
+        assert "tasks" in project_data
+        assert len(project_data["tasks"]) >= 1
+        assert any(t["uuid"] == task.uuid for t in project_data["tasks"])
+        assert "account" in project_data
+        assert project_data["account"]["uuid"] == account.uuid
+
+        # Test listing tasks with multiple relations included
+        response = client.get("/tasks/?include=project", headers=auth_headers)
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data["items"]) >= 1
+        task_data = next(t for t in data["items"] if t["uuid"] == task.uuid)
+        assert "project" in task_data
+        assert task_data["project"]["uuid"] == project.uuid
+
+        # Test with non-existent relation
+        response = client.get("/accounts/?include=non_existent", headers=auth_headers)
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data["items"]) >= 1
+        account_data = next(a for a in data["items"] if a["uuid"] == account.uuid)
+        assert "non_existent" not in account_data
+
     async def test_update_task(self, client, auth_headers, task):
         """Test updating a task."""
         response = client.put(

@@ -6,7 +6,7 @@ with database and user dependencies.
 
 from typing import Any, Callable, List, Optional, Type
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel
 
 from fastapi_sdk.controllers import ModelController
@@ -130,11 +130,30 @@ class RouteController:
         @require_permission(f"{self.model_name}:read")
         async def list_route(
             request: Request,
+            include: List[str] = Query(default=None),
             db: Any = Depends(self.get_db),
         ):
-            """List all resources (requires authentication)."""
+            """List all resources (requires authentication).
+
+            Args:
+                request: The FastAPI request object
+                db: The database connection
+                include: Optional list of related objects to include in the response
+
+            Example:
+                # List accounts with their projects included
+                GET /accounts/?include=projects
+
+                # List projects with their tasks included
+                GET /projects/?include=tasks
+
+                # List accounts with multiple relations included
+                GET /accounts/?include=projects&include=tasks
+            """
+
             instances = await self.controller(db).list(
                 claims=request.state.claims,
+                include=include,
             )
             return instances
 
