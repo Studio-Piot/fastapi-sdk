@@ -213,6 +213,7 @@ async def test_relationships(db_engine: AgnosticDatabase):
     # Create a task for this project
     task = await Task(db_engine).create(
         {
+            "name": "Test Task",
             "description": "Test Task",
             "account_id": account.uuid,
             "project_id": project.uuid,

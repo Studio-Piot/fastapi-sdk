@@ -169,7 +169,7 @@ def different_auth_headers(different_mock_jwt_token):
 async def account(db_engine):
     """Create a test account."""
     _account = AccountModel(
-        name="TestAccount",
+        name="Test Account",
         created_at=datetime.now(UTC),
         updated_at=datetime.now(UTC),
     )
@@ -227,7 +227,7 @@ async def deleted_project(db_engine, account):
 async def task(db_engine, project, account):
     """Create a test task."""
     task = TaskModel(
-        title="Test Task",
+        name="Test Task",
         description="Test Description",
         project_id=project.uuid,
         account_id=account.uuid,
@@ -243,7 +243,7 @@ async def task(db_engine, project, account):
 async def deleted_task(db_engine, project, account):
     """Create a deleted test task."""
     task = TaskModel(
-        title="Deleted Task",
+        name="Deleted Task",
         description="Deleted Description",
         project_id=project.uuid,
         account_id=account.uuid,

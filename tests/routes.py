@@ -31,6 +31,8 @@ account_routes = RouteController(
     schema_response_paginated=AccountResponsePaginated,
     schema_create=AccountCreate,
     schema_update=AccountUpdate,
+    allowed_query_fields=["name"],
+    allowed_order_fields=["created_at", "name"],
 )
 
 project_routes = RouteController(
@@ -42,6 +44,8 @@ project_routes = RouteController(
     schema_response_paginated=ProjectResponsePaginated,
     schema_create=ProjectCreate,
     schema_update=ProjectUpdate,
+    allowed_query_fields=["account_id", "name"],
+    allowed_order_fields=["created_at", "name"],
 )
 
 task_routes = RouteController(
@@ -53,4 +57,6 @@ task_routes = RouteController(
     schema_response_paginated=TaskResponsePaginated,
     schema_create=TaskCreate,
     schema_update=TaskUpdate,
+    allowed_query_fields=["account_id", "project_id", "status", "due_date"],
+    allowed_order_fields=["created_at", "due_date", "status"],
 )

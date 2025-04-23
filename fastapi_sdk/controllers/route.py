@@ -4,7 +4,7 @@ This module provides a base class for generating authenticated CRUD routes
 with database and user dependencies.
 """
 
-from typing import Any, Callable, List, Optional, Type
+from typing import Any, Callable, Dict, List, Optional, Type
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel
@@ -29,6 +29,8 @@ class RouteController:
         schema_create: Optional[Type[BaseModel]] = None,
         schema_update: Optional[Type[BaseModel]] = None,
         include_routes: Optional[List[str]] = None,
+        allowed_query_fields: Optional[List[str]] = None,
+        allowed_order_fields: Optional[List[str]] = None,
     ):
         """Initialize the route controller.
 
@@ -43,6 +45,8 @@ class RouteController:
             schema_update: Optional Pydantic model for updates
             include_routes: Optional list of routes to include (defaults to all)
                           Valid options: ["create", "get", "list", "update", "delete", "list_deleted"]
+            allowed_query_fields: Optional list of fields that can be used in query parameters
+            allowed_order_fields: Optional list of fields that can be used for ordering
         """
         self.prefix = prefix
         self.tags = tags
@@ -60,6 +64,8 @@ class RouteController:
             "delete",
             "list_deleted",
         ]
+        self.allowed_query_fields = allowed_query_fields or []
+        self.allowed_order_fields = allowed_order_fields or []
 
         # Get model name for permissions
         self.model_name = controller.model.__name__.lower().replace("model", "")
@@ -155,28 +161,97 @@ class RouteController:
         @require_permission(f"{self.model_name}:read")
         async def list_route(
             request: Request,
-            include: List[str] = Query(default=None),
+            page: int = Query(default=0, ge=0, description="Page number (0-based)"),
+            order_by: str = Query(default=None, description="Field to order by"),
+            order_direction: str = Query(
+                default="asc",
+                pattern="^(asc|desc)$",
+                description="Order direction (asc or desc)",
+            ),
+            include: List[str] = Query(
+                default=None, description="List of related objects to include"
+            ),
             db: Any = Depends(self.get_db),
         ):
             """List all resources (requires authentication).
 
             Args:
                 request: The FastAPI request object
+                page: Page number (0-based)
+                order_by: Field to order by
+                order_direction: Order direction (asc or desc)
+                include: List of related objects to include
                 db: The database connection
-                include: Optional list of related objects to include in the response
 
             Example:
-                # List accounts with their projects included
+                # List accounts with pagination
+                GET /accounts/?page=0
+
+                # List accounts with ordering
+                GET /accounts/?order_by=created_at&order_direction=desc
+
+                # List accounts with filtering
+                GET /accounts/?name=Test Account&status=active
+
+                # List accounts with relations included
                 GET /accounts/?include=projects
 
-                # List projects with their tasks included
-                GET /projects/?include=tasks
-
-                # List accounts with multiple relations included
-                GET /accounts/?include=projects&include=tasks
+                # Combine multiple parameters
+                GET /accounts/?page=0&order_by=created_at&order_direction=desc&include=projects&name=Test Account
             """
+            # Get all query parameters
+            query_params = dict(request.query_params)
+            print("query_params", query_params)
+
+            # Validate order_by field if provided
+            if order_by and order_by not in self.allowed_order_fields:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Invalid order_by field: {order_by}. Allowed fields: {self.allowed_order_fields}",
+                )
+
+            # Parse order_by parameter if provided
+            order_by_dict = None
+            if order_by:
+                direction = 1 if order_direction == "asc" else -1
+                order_by_dict = {order_by: direction}
+
+            # Convert query parameters to filter list
+            query_list = []
+            for field, value in query_params.items():
+                # Skip special parameters that are handled separately
+                if field in ["page", "order_by", "order_direction", "include"]:
+                    continue
+
+                # Validate query field
+                if field not in self.allowed_query_fields:
+                    raise HTTPException(
+                        status_code=400,
+                        detail=f"Invalid query field: {field}. Allowed fields: {self.allowed_query_fields}",
+                    )
+
+                # Handle different value types
+                if isinstance(value, str):
+                    # Handle range queries (e.g., created_at=2023-01-01..2023-12-31)
+                    if ".." in value:
+                        start, end = value.split("..")
+                        query_list.append({field: {"$gte": start, "$lte": end}})
+                    # Handle list values (e.g., status=active,pending)
+                    elif "," in value:
+                        values = value.split(",")
+                        query_list.append({field: {"$in": values}})
+                    # Handle partial case-insensitive match
+                    else:
+                        query_list.append(
+                            {field: {"$regex": f".*{value}.*", "$options": "i"}}
+                        )
+                else:
+                    query_list.append({field: value})
 
             instances = await self.controller(db).list(
+                page=page,
+                query=query_list,
+                order_by=order_by_dict,
                 claims=request.state.claims,
                 include=include,
             )

@@ -606,4 +606,261 @@ account_routes = RouteController(
 
 # Include routes
 app.include_router(account_routes.router)
+```
+
+## Query and Order Parameters
+
+The RouteController supports flexible querying and ordering through URL parameters. You can configure which fields are allowed for querying and ordering when initializing the RouteController.
+
+### Configuration
+
+```python
+account_routes = RouteController(
+    prefix="/accounts",
+    tags=["accounts"],
+    controller=AccountController,
+    get_db=get_db,
+    schema_response=AccountResponse,
+    schema_response_paginated=AccountResponsePaginated,
+    schema_create=AccountCreate,
+    schema_update=AccountUpdate,
+    allowed_query_fields=["name", "email", "status"],  # Fields that can be queried
+    allowed_order_fields=["created_at", "updated_at", "name"],  # Fields that can be ordered by
+)
+```
+
+### Query Parameters
+
+You can filter results using query parameters. The system supports:
+- Exact matches: `?name=John`
+- Partial matches (case-insensitive): `?name=john` (matches "John", "JOHN", etc.)
+- Multiple values: `?status=active,pending`
+- Range queries: `?created_at=2023-01-01..2023-12-31`
+
+Example:
+```python
+# List accounts with name containing "john" (case-insensitive)
+GET /accounts/?name=john
+
+# List accounts with specific status
+GET /accounts/?status=active,pending
+
+# List accounts created in a date range
+GET /accounts/?created_at=2023-01-01..2023-12-31
+```
+
+### Order Parameters
+
+You can order results using the `order_by` and `order_direction` parameters:
+- `order_by`: Field to sort by (must be in allowed_order_fields)
+- `order_direction`: Sort direction ("asc" or "desc")
+
+Example:
+```python
+# List accounts ordered by creation date (newest first)
+GET /accounts/?order_by=created_at&order_direction=desc
+
+# List accounts ordered by name (alphabetically)
+GET /accounts/?order_by=name&order_direction=asc
+```
+
+### Combining Parameters
+
+You can combine query and order parameters:
+
+```python
+# List active accounts ordered by creation date
+GET /accounts/?status=active&order_by=created_at&order_direction=desc
+
+# List accounts with name containing "john" and specific status
+GET /accounts/?name=john&status=active,pending
+```
+
+### Error Handling
+
+The system will return appropriate error responses:
+- 400 Bad Request if querying on non-allowed fields
+- 400 Bad Request if ordering by non-allowed fields
+- 400 Bad Request if invalid order direction
+- 400 Bad Request if invalid date range format
+
+## Permission System
+
+The RouteController implements a permission-based access control system that requires specific permissions for each CRUD operation. The permissions are automatically generated based on the model name and the action being performed.
+
+### Permission Format
+
+Permissions follow the format `{model_name}:{action}`, where:
+- `model_name` is the lowercase name of your model (e.g., "project", "account")
+- `action` is one of: "create", "read", "update", "delete"
+
+For example:
+- `project:create` - Permission to create new projects
+- `project:read` - Permission to view projects
+- `project:update` - Permission to modify projects
+- `project:delete` - Permission to delete projects
+
+### User Claims
+
+The permission system relies on user claims in the request. The claims should include:
+- `permissions`: List of permission strings the user has
+- `roles`: List of roles the user has
+
+Example claims:
+```json
+{
+    "account_id": "acc_123",
+    "permissions": ["project:create", "project:read"],
+    "roles": ["user"]
+}
+```
+
+### Permission Checks
+
+The system checks permissions in the following order:
+1. First checks if the user has the specific permission (e.g., "project:create")
+2. If not, checks if the user has an admin or superuser role
+3. If neither condition is met, returns a 403 Forbidden error
+
+### Route Permissions
+
+Each route requires specific permissions:
+
+| Route | Method | Permission Required |
+|-------|---------|-------------------|
+| Create | POST | `{model_name}:create` |
+| Get | GET | `{model_name}:read` |
+| List | GET | `{model_name}:read` |
+| Update | PUT | `{model_name}:update` |
+| Delete | DELETE | `{model_name}:delete` |
+| List Deleted | GET | `{model_name}:read` |
+
+### Example Usage
+
+```python
+from fastapi_sdk.controllers import RouteController
+from fastapi_sdk.security.permissions import require_permission
+
+# Create a route controller
+route_controller = RouteController(
+    prefix="/projects",
+    tags=["projects"],
+    controller=ProjectController,
+    get_db=get_db,
+    schema_response=ProjectResponse,
+    schema_response_paginated=ProjectResponsePaginated,
+    schema_create=ProjectCreate,
+    schema_update=ProjectUpdate,
+)
+
+# The routes will automatically require the following permissions:
+# POST /projects/ -> project:create
+# GET /projects/{id} -> project:read
+# GET /projects/ -> project:read
+# PUT /projects/{id} -> project:update
+# DELETE /projects/{id} -> project:delete
+# GET /projects/deleted/ -> project:read
+```
+
+### Error Responses
+
+When a user lacks the required permission, the API returns a 403 Forbidden response:
+
+```json
+{
+    "detail": "Permission denied: project:create required"
+}
+```
+
+### Best Practices
+
+1. **Role-Based Access**: Use roles for broad access control and specific permissions for fine-grained control
+2. **Superuser Override**: Superuser roles automatically get access to all operations
+3. **Permission Naming**: Keep permission names consistent with your model names
+4. **Documentation**: Document required permissions in your API documentation
+
+## Example
+
+Here's a complete example of setting up a Route Controller:
+
+```python
+from fastapi import FastAPI
+from fastapi_sdk.controllers.route import RouteController
+from fastapi_sdk.middleware.auth import AuthMiddleware
+from fastapi_sdk.utils.schema import BaseResponsePaginated
+from pydantic import BaseModel
+from typing import Optional
+from datetime import datetime
+
+# Models
+class AccountBase(BaseModel):
+    name: str
+
+class AccountCreate(AccountBase):
+    pass
+
+class AccountUpdate(AccountBase):
+    name: Optional[str] = None
+
+class AccountResponse(AccountBase):
+    uuid: str
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True
+
+# Controller
+class AccountController(ModelController):
+    """Account controller."""
+
+    model = AccountModel
+    schema_create = AccountCreate
+    schema_update = AccountUpdate
+    schema_response = AccountResponse
+    cascade_delete = True  # Will delete related projects and tasks
+    ownership_rule = OwnershipRule(
+        claim_field="account_id",
+        model_field="uuid",
+        allow_public=False,
+    )
+
+    relationships = {
+        "projects": {
+            "type": "one_to_many",
+            "controller": "Project",
+            "foreign_key": "account_id",
+        }
+    }
+
+# FastAPI app
+app = FastAPI()
+
+# Middleware
+app.add_middleware(
+    AuthMiddleware,
+    secret_key="your-secret-key",
+    algorithm="HS256",
+    token_prefix="Bearer",
+)
+
+# Database
+async def get_db():
+    # Implementation
+    pass
+
+# Routes
+account_routes = RouteController(
+    prefix="/accounts",
+    tags=["accounts"],
+    controller=AccountController,
+    get_db=get_db,
+    schema_response=AccountResponse,
+    schema_response_paginated=BaseResponsePaginated[AccountResponse],
+    schema_create=AccountCreate,
+    schema_update=AccountUpdate,
+)
+
+# Include routes
+app.include_router(account_routes.router)
 ``` 

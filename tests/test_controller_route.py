@@ -3,9 +3,92 @@
 from datetime import timedelta
 
 import pytest
+from motor.core import AgnosticDatabase
 
 from fastapi_sdk.utils.test import create_access_token
 from tests.config import settings
+from tests.controllers import Account, Project, Task
+
+
+async def fixtures(db_engine: AgnosticDatabase, account: Account):
+    """Re-usable test fictures"""
+    superuser_claims = {"roles": ["superuser"]}
+    # Create two accounts without claims (top-level model)
+    account_1 = account
+    account_2 = await Account(db_engine).create(
+        {"name": "Account 2"}, claims=superuser_claims
+    )
+
+    project_11 = await Project(db_engine).create(
+        {"name": "Project 11", "account_id": account_1.uuid},
+        claims=superuser_claims,
+    )
+    project_12 = await Project(db_engine).create(
+        {"name": "Project 12", "account_id": account_1.uuid},
+        claims=superuser_claims,
+    )
+    project_21 = await Project(db_engine).create(
+        {"name": "Project 21", "account_id": account_2.uuid},
+        claims=superuser_claims,
+    )
+    project_22 = await Project(db_engine).create(
+        {"name": "Project 22", "account_id": account_2.uuid},
+        claims=superuser_claims,
+    )
+    task_111 = await Task(db_engine).create(
+        {
+            "name": "Task 111",
+            "project_id": project_11.uuid,
+            "account_id": account_1.uuid,
+        },
+        claims=superuser_claims,
+    )
+    task_112 = await Task(db_engine).create(
+        {
+            "name": "Task 112",
+            "project_id": project_11.uuid,
+            "account_id": account_1.uuid,
+        },
+        claims=superuser_claims,
+    )
+    task_113 = await Task(db_engine).create(
+        {
+            "name": "Task 113",
+            "project_id": project_11.uuid,
+            "account_id": account_1.uuid,
+        },
+        claims=superuser_claims,
+    )
+    task_121 = await Task(db_engine).create(
+        {
+            "name": "Task 121",
+            "project_id": project_12.uuid,
+            "account_id": account_1.uuid,
+        },
+        claims=superuser_claims,
+    )
+    task_122 = await Task(db_engine).create(
+        {
+            "name": "Task 122",
+            "project_id": project_12.uuid,
+            "account_id": account_1.uuid,
+        },
+        claims=superuser_claims,
+    )
+
+    return (
+        account_1,
+        account_2,
+        project_11,
+        project_12,
+        project_21,
+        project_22,
+        task_111,
+        task_112,
+        task_113,
+        task_121,
+        task_122,
+    )
 
 
 @pytest.mark.asyncio
@@ -130,6 +213,71 @@ class TestProjectRoutes:
         data = response.json()
         assert len(data["items"]) >= 1
         assert any(p["uuid"] == deleted_project.uuid for p in data["items"])
+
+    async def test_list_allowed_query_fields(
+        self, client, auth_headers, db_engine, account
+    ):
+        """Test listing allowed query fields."""
+        (
+            _account_1,
+            _account_2,
+            _project_11,
+            _project_12,
+            _project_21,
+            _project_22,
+            _task_111,
+            _task_112,
+            _task_113,
+            _task_121,
+            _task_122,
+        ) = await fixtures(db_engine, account)
+        response = client.get("/projects/?name=Project 11", headers=auth_headers)
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data["items"]) == 1
+        assert any(a["name"] == "Project 11" for a in data["items"])
+
+        response = client.get(
+            f"/projects/?account_id={account.uuid}", headers=auth_headers
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data["items"]) == 2
+        assert any(a["account_id"] == account.uuid for a in data["items"])
+
+    async def test_list_allowed_order_fields(
+        self, client, auth_headers, db_engine, account
+    ):
+        """Test listing allowed order fields."""
+        (
+            _account_1,
+            _account_2,
+            _project_11,
+            _project_12,
+            _project_21,
+            _project_22,
+            _task_111,
+            _task_112,
+            _task_113,
+            _task_121,
+            _task_122,
+        ) = await fixtures(db_engine, account)
+        response = client.get("/projects/?order_by=name", headers=auth_headers)
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data["items"]) == 2
+        assert data["items"][0]["name"] == "Project 11"
+        assert data["items"][1]["name"] == "Project 12"
+
+        # Reverse order
+        response = client.get(
+            "/projects/?order_by=name&order_direction=desc", headers=auth_headers
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data["items"]) == 2
+        assert data["items"][0]["name"] == "Project 12"
+        assert data["items"][1]["name"] == "Project 11"
 
 
 @pytest.mark.asyncio

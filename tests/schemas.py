@@ -112,7 +112,8 @@ class ProjectResponsePaginated(BaseResponsePaginated):
 class TaskBase(BaseModel):
     """Base schema for common attributes"""
 
-    description: str = Field(min_length=2, max_length=50)
+    name: str = Field(min_length=2, max_length=50)
+    description: Optional[str] = Field(min_length=0, max_length=1000, default=None)
     project_id: str
     account_id: str
     assignee_ids: Optional[List[str]] = Field(default=None)
@@ -130,6 +131,7 @@ class TaskCreate(TaskBase):
 class TaskUpdate(TaskBase):
     """Schema for updating a task"""
 
+    name: Optional[str] = Field(min_length=2, max_length=50, default=None)
     project_id: Optional[str] = Field(default=None)
     account_id: Optional[str] = Field(default=None)
     updated_at: datetime = Field(default_factory=datetime_now_sec)

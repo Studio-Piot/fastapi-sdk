@@ -54,7 +54,8 @@ class TaskModel(Model):
     account_id: str
     project_id: str
     assignee_ids: Optional[List[str]] = Field(default=None)
-    description: str
+    name: str
+    description: Optional[str] = Field(default=None)
     status: Optional[TaskStatusOptions] = TaskStatusOptions.TO_DO
     due_date: Optional[datetime] = Field(default=None)
     deleted: bool = False
