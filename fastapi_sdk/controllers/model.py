@@ -268,8 +268,6 @@ class ModelController:
             for q in query:
                 _query.update(q)
 
-        print("query", _query)
-
         # Apply ownership filter if rule exists
         if self.ownership_rule:
             if not self.ownership_rule.allow_public and not claims:
@@ -336,8 +334,6 @@ class ModelController:
         # Add pagination data
         _pipeline.append({"$skip": (page - 1) * self.n_per_page if page > 0 else 0})
         _pipeline.append({"$limit": self.n_per_page})
-
-        print("pipeline", _pipeline)
 
         # Execute the aggregation
         items = await _collection.aggregate(_pipeline).to_list(length=self.n_per_page)

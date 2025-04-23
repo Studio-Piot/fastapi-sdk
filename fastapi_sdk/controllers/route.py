@@ -201,7 +201,6 @@ class RouteController:
             """
             # Get all query parameters
             query_params = dict(request.query_params)
-            print("query_params", query_params)
 
             # Validate order_by field if provided
             if order_by and order_by not in self.allowed_order_fields:
@@ -240,11 +239,20 @@ class RouteController:
                     elif "," in value:
                         values = value.split(",")
                         query_list.append({field: {"$in": values}})
-                    # Handle partial case-insensitive match
-                    else:
+                    # Handle contains match (e.g., name=*John*)
+                    elif value.startswith("*") and value.endswith("*"):
+                        contains_value = value[1:-1]  # Remove * and *
                         query_list.append(
-                            {field: {"$regex": f".*{value}.*", "$options": "i"}}
+                            {
+                                field: {
+                                    "$regex": f".*{contains_value}.*",
+                                    "$options": "i",
+                                }
+                            }
                         )
+                    # Handle exact match (default)
+                    else:
+                        query_list.append({field: value})
                 else:
                     query_list.append({field: value})
 

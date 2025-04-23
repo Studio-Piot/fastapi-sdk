@@ -632,15 +632,18 @@ account_routes = RouteController(
 ### Query Parameters
 
 You can filter results using query parameters. The system supports:
-- Exact matches: `?name=John`
-- Partial matches (case-insensitive): `?name=john` (matches "John", "JOHN", etc.)
+- Exact matches: `?name=John` (matches exactly "John")
+- Contains matches (case-insensitive): `?name=*John*` (matches "John", "JOHN", "Johnson", etc.)
 - Multiple values: `?status=active,pending`
 - Range queries: `?created_at=2023-01-01..2023-12-31`
 
 Example:
 ```python
+# List accounts with exact name match
+GET /accounts/?name=John
+
 # List accounts with name containing "john" (case-insensitive)
-GET /accounts/?name=john
+GET /accounts/?name=*john*
 
 # List accounts with specific status
 GET /accounts/?status=active,pending
@@ -648,6 +651,29 @@ GET /accounts/?status=active,pending
 # List accounts created in a date range
 GET /accounts/?created_at=2023-01-01..2023-12-31
 ```
+
+### Query Syntax
+
+1. **Exact Match (Default)**
+   - Just provide the value without special characters
+   - Example: `?name=John` will only match "John"
+   - Useful for fields like status, type, or other enum-like values
+
+2. **Contains Match**
+   - Use `*value*` syntax for contains matches
+   - Example: `?name=*john*` will match "John", "Johnson", "Johnny", etc.
+   - Case-insensitive by default
+   - Good for text search and fuzzy matching
+
+3. **Multiple Values**
+   - Use comma-separated values
+   - Example: `?status=active,pending`
+   - Matches any of the provided values
+
+4. **Range Queries**
+   - Use `start..end` syntax
+   - Example: `?created_at=2023-01-01..2023-12-31`
+   - Works with dates, numbers, and other comparable values
 
 ### Order Parameters
 
