@@ -94,6 +94,7 @@ class ProjectResponse(ProjectBase):
     updated_at: datetime
     deleted: bool
     tasks: Optional[List["TaskResponse"]] = Field(default=None)
+    latest_task: Optional["TaskResponse"] = Field(default=None)
     account: Optional["AccountResponse"] = Field(default=None)
     model_config = ConfigDict(from_attributes=True)
 

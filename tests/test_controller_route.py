@@ -5,9 +5,16 @@ from datetime import timedelta
 import pytest
 from motor.core import AgnosticDatabase
 
+from fastapi_sdk.controllers.route import RouteController
 from fastapi_sdk.utils.test import create_access_token
 from tests.config import settings
 from tests.controllers import Account, Project, Task
+from tests.schemas import (
+    ProjectCreate,
+    ProjectResponse,
+    ProjectResponsePaginated,
+    ProjectUpdate,
+)
 
 
 async def fixtures(db_engine: AgnosticDatabase, account: Account):
@@ -278,6 +285,45 @@ class TestProjectRoutes:
         assert len(data["items"]) == 2
         assert data["items"][0]["name"] == "Project 12"
         assert data["items"][1]["name"] == "Project 11"
+
+    async def test_list_projects_with_custom_pipeline(
+        self, client, auth_headers, db_engine, account
+    ):
+        """Test listing projects with custom pipeline that includes latest task."""
+        # Create test data
+        (
+            _account_1,
+            _account_2,
+            project_11,
+            project_12,
+            _project_21,
+            _project_22,
+            task_111,
+            task_112,
+            task_113,
+            task_121,
+            task_122,
+        ) = await fixtures(db_engine, account)
+
+        # Test the list endpoint
+        response = client.get("/projects/", headers=auth_headers)
+        assert response.status_code == 200
+        data = response.json()
+
+        # Find project 11 in the response
+        project_11_data = next(p for p in data["items"] if p["uuid"] == project_11.uuid)
+        print(project_11_data)
+        assert "latest_task" in project_11_data
+        assert (
+            project_11_data["latest_task"]["uuid"] == task_113.uuid
+        )  # Last task by name
+
+        # Find project 12 in the response
+        project_12_data = next(p for p in data["items"] if p["uuid"] == project_12.uuid)
+        assert "latest_task" in project_12_data
+        assert (
+            project_12_data["latest_task"]["uuid"] == task_122.uuid
+        )  # Last task by name
 
 
 @pytest.mark.asyncio

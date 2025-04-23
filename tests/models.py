@@ -37,6 +37,7 @@ class ProjectModel(Model):
     deleted: bool = False
     account: Optional["AccountModel"] = Field(default=None)
     tasks: Optional[List["TaskModel"]] = Field(default=None)
+    latest_task: Optional["TaskModel"] = Field(default=None)
 
     model_config = {
         "indexes": lambda: [

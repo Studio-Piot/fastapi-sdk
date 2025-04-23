@@ -395,6 +395,21 @@ class AccountController(ModelController):
         }
     }
 
+    # Define custom pipeline stages
+    extra_pipeline = [
+        {
+            "$project": {
+                "name": 1,
+                "email": 1,
+                "status": 1,
+                "created_at": 1,
+                "is_active": {"$eq": ["$status", "active"]}
+            }
+        }
+    ]
+
+    # The pipeline will be automatically applied to all list queries
+
 # FastAPI app
 app = FastAPI()
 
@@ -576,36 +591,20 @@ class AccountController(ModelController):
         }
     }
 
-# FastAPI app
-app = FastAPI()
+    # Define custom pipeline stages
+    extra_pipeline = [
+        {
+            "$project": {
+                "name": 1,
+                "email": 1,
+                "status": 1,
+                "created_at": 1,
+                "is_active": {"$eq": ["$status", "active"]}
+            }
+        }
+    ]
 
-# Middleware
-app.add_middleware(
-    AuthMiddleware,
-    secret_key="your-secret-key",
-    algorithm="HS256",
-    token_prefix="Bearer",
-)
-
-# Database
-async def get_db():
-    # Implementation
-    pass
-
-# Routes
-account_routes = RouteController(
-    prefix="/accounts",
-    tags=["accounts"],
-    controller=AccountController,
-    get_db=get_db,
-    schema_response=AccountResponse,
-    schema_response_paginated=BaseResponsePaginated[AccountResponse],
-    schema_create=AccountCreate,
-    schema_update=AccountUpdate,
-)
-
-# Include routes
-app.include_router(account_routes.router)
+    # The pipeline will be automatically applied to all list queries
 ```
 
 ## Query and Order Parameters
@@ -710,6 +709,115 @@ The system will return appropriate error responses:
 - 400 Bad Request if invalid order direction
 - 400 Bad Request if invalid date range format
 
+## Custom Pipeline
+
+You can define custom MongoDB aggregation pipeline stages directly in your ModelController class. This allows you to add custom transformations and aggregations to your queries without exposing them through the API.
+
+Example:
+```python
+class AccountController(ModelController):
+    """Account controller."""
+
+    model = AccountModel
+    schema_create = AccountCreate
+    schema_update = AccountUpdate
+    schema_response = AccountResponse
+
+    # Define custom pipeline stages
+    extra_pipeline = [
+        {
+            "$project": {
+                "name": 1,
+                "email": 1,
+                "status": 1,
+                "created_at": 1,
+                "is_active": {"$eq": ["$status", "active"]}
+            }
+        }
+    ]
+
+    # The pipeline will be automatically applied to all list queries
+```
+
+#### Pipeline Stage Examples
+
+1. **Projection and Field Selection**
+   ```python
+   extra_pipeline = [
+       {
+           "$project": {
+               "name": 1,
+               "email": 1,
+               "status": 1,
+               "created_at": 1,
+               "is_active": {"$eq": ["$status", "active"]}
+           }
+       }
+   ]
+   ```
+
+2. **Grouping and Aggregation**
+   ```python
+   extra_pipeline = [
+       {
+           "$group": {
+               "_id": "$type",
+               "count": {"$sum": 1},
+               "avg_age": {"$avg": "$age"}
+           }
+       }
+   ]
+   ```
+
+3. **Filtering and Matching**
+   ```python
+   extra_pipeline = [
+       {
+           "$match": {
+               "age": {"$gt": 30},
+               "status": "active"
+           }
+       }
+   ]
+   ```
+
+4. **Sorting and Limiting**
+   ```python
+   extra_pipeline = [
+       {
+           "$sort": {
+               "status": 1,
+               "created_at": -1
+           }
+       },
+       {
+           "$limit": 5
+       }
+   ]
+   ```
+
+#### Best Practices
+
+1. **Security**
+   - Define pipeline stages in the controller to prevent injection
+   - Restrict access to sensitive fields
+   - Use appropriate indexes for pipeline operations
+
+2. **Performance**
+   - Add appropriate indexes for pipeline operations
+   - Limit the number of pipeline stages
+   - Use efficient aggregation operators
+
+3. **Maintenance**
+   - Document the purpose of each pipeline stage
+   - Keep pipeline stages simple and focused
+   - Test pipeline performance with real data
+
+4. **Error Handling**
+   - Handle potential errors in pipeline stages
+   - Provide fallback behavior when needed
+   - Log pipeline execution for debugging
+
 ## Permission System
 
 The RouteController implements a permission-based access control system that requires specific permissions for each CRUD operation. The permissions are automatically generated based on the model name and the action being performed.
@@ -858,6 +966,21 @@ class AccountController(ModelController):
             "foreign_key": "account_id",
         }
     }
+
+    # Define custom pipeline stages
+    extra_pipeline = [
+        {
+            "$project": {
+                "name": 1,
+                "email": 1,
+                "status": 1,
+                "created_at": 1,
+                "is_active": {"$eq": ["$status", "active"]}
+            }
+        }
+    ]
+
+    # The pipeline will be automatically applied to all list queries
 
 # FastAPI app
 app = FastAPI()

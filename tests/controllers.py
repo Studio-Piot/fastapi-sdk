@@ -66,6 +66,44 @@ class Project(ModelController):
         },
     }
 
+    # Custom pipeline to get the last task by name
+    extra_pipeline = [
+        {
+            "$lookup": {
+                "from": "task",
+                "localField": "uuid",
+                "foreignField": "project_id",
+                "as": "tasks_for_project",
+            }
+        },
+        {
+            "$addFields": {
+                "latest_task": {
+                    "$arrayElemAt": [
+                        {
+                            "$sortArray": {
+                                "input": "$tasks_for_project",
+                                "sortBy": {"name": -1},
+                            }
+                        },
+                        0,
+                    ]
+                }
+            }
+        },
+        {
+            "$project": {
+                "tasks_for_project": 0  # Remove the tasks array since we only need latest_task
+            }
+        },
+        # {
+        #     "$project": {
+        #         "latest_task": 1,
+        #         "tasks_for_project": 1,
+        #     }
+        # },
+    ]
+
 
 class Task(ModelController):
     """Task controller."""

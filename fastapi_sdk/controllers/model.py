@@ -43,6 +43,9 @@ class ModelController:
     cascade_delete: bool = False  # Whether to cascade delete related items
     ownership_rule: Optional[OwnershipRule] = None  # Rule for filtering records
     _controller_registry: dict = {}  # Registry for controller classes
+    extra_pipeline: Optional[List[dict]] = (
+        None  # Custom MongoDB aggregation pipeline stages
+    )
 
     def __init__(self, db_engine: AIOEngine):
         """Initialize the controller."""
@@ -323,6 +326,11 @@ class ModelController:
                         }
                     )
                     _pipeline.append({"$unwind": f"${relation}"})
+
+        # Add custom pipeline stages if defined in the controller
+        if self.extra_pipeline:
+            # print("custom pipeline", self.extra_pipeline)
+            _pipeline.extend(self.extra_pipeline)
 
         # Sorting, default by created_at
         _sort = order_by if order_by else {"created_at": -1}
