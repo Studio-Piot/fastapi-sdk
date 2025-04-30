@@ -72,8 +72,7 @@ def decode_access_token(
         else:
             # Get the JWKS from the issuer
             jwk = cached_jwk_response(auth_issuer, auth_client_id)
-            key = JsonWebKey.import_key(json.loads(jwk))
-            claims = jwt.decode(token, key)
+            claims = jwt.decode(token, jwk)
 
         # Validate expiration and other standard claims
         claims.validate()
