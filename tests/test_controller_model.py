@@ -66,6 +66,32 @@ async def test_model_controller(db_engine: AgnosticDatabase):
     assert accounts["page"] == 0
     assert accounts["pages"] == 1
 
+    # Test n_per_page functionality
+    # Test default n_per_page (25)
+    accounts = await Account(db_engine).list(claims={"account_id": account_1.uuid})
+    assert len(accounts["items"]) == 1
+    assert accounts["total"] == 1
+    assert accounts["page"] == 0
+    assert accounts["pages"] == 1
+
+    # Test custom n_per_page
+    accounts = await Account(db_engine).list(
+        claims={"account_id": account_1.uuid}, n_per_page=10
+    )
+    assert len(accounts["items"]) == 1
+    assert accounts["total"] == 1
+    assert accounts["page"] == 0
+    assert accounts["pages"] == 1
+
+    # Test n_per_page exceeding max limit (250)
+    accounts = await Account(db_engine).list(
+        claims={"account_id": account_1.uuid}, n_per_page=300
+    )
+    assert len(accounts["items"]) == 1
+    assert accounts["total"] == 1
+    assert accounts["page"] == 0
+    assert accounts["pages"] == 1
+
     # Delete account
     account_1 = await Account(db_engine).delete(
         uuid=account_1.uuid, claims={"account_id": account_1.uuid}

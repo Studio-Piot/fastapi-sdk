@@ -171,6 +171,12 @@ class RouteController:
             include: List[str] = Query(
                 default=None, description="List of related objects to include"
             ),
+            n_per_page: int = Query(
+                default=None,
+                ge=1,
+                le=250,
+                description="Number of items per page (max 250)",
+            ),
             db: Any = Depends(self.get_db),
         ):
             """List all resources (requires authentication).
@@ -181,6 +187,7 @@ class RouteController:
                 order_by: Field to order by
                 order_direction: Order direction (asc or desc)
                 include: List of related objects to include
+                n_per_page: Number of items per page (max 250)
                 db: The database connection
 
             Example:
@@ -196,8 +203,11 @@ class RouteController:
                 # List accounts with relations included
                 GET /accounts/?include=projects
 
+                # List accounts with custom page size
+                GET /accounts/?n_per_page=50
+
                 # Combine multiple parameters
-                GET /accounts/?page=0&order_by=created_at&order_direction=desc&include=projects&name=Test Account
+                GET /accounts/?page=0&order_by=created_at&order_direction=desc&include=projects&name=Test Account&n_per_page=50
             """
             # Get all query parameters
             query_params = dict(request.query_params)
@@ -219,7 +229,13 @@ class RouteController:
             query_list = []
             for field, value in query_params.items():
                 # Skip special parameters that are handled separately
-                if field in ["page", "order_by", "order_direction", "include"]:
+                if field in [
+                    "page",
+                    "order_by",
+                    "order_direction",
+                    "include",
+                    "n_per_page",
+                ]:
                     continue
 
                 # Validate query field
@@ -262,6 +278,7 @@ class RouteController:
                 order_by=order_by_dict,
                 claims=request.state.claims,
                 include=include,
+                n_per_page=n_per_page,
             )
             return instances
 

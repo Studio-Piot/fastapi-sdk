@@ -38,7 +38,7 @@ class ModelController:
     model: Type[Model]
     schema_create: Type[BaseModel]
     schema_update: Type[BaseModel]
-    n_per_page: int = 10
+    n_per_page: int = 25
     relationships: dict = {}  # Define relationships between models
     cascade_delete: bool = False  # Whether to cascade delete related items
     ownership_rule: Optional[OwnershipRule] = None  # Rule for filtering records
@@ -246,6 +246,7 @@ class ModelController:
         order_by: Optional[dict] = None,
         claims: Optional[Dict[str, Any]] = None,
         include: Optional[List[str]] = None,
+        n_per_page: Optional[int] = None,
     ) -> List[BaseModel]:
         """List models.
 
@@ -255,6 +256,7 @@ class ModelController:
             order_by: Optional sorting criteria
             claims: Optional claims for ownership verification
             include: Optional list of related objects to include
+            n_per_page: Optional number of items per page (max 250)
         """
         # Get the collection
         collection_name = (
@@ -329,7 +331,6 @@ class ModelController:
 
         # Add custom pipeline stages if defined in the controller
         if self.extra_pipeline:
-            # print("custom pipeline", self.extra_pipeline)
             _pipeline.extend(self.extra_pipeline)
 
         # Sorting, default by created_at
@@ -339,18 +340,21 @@ class ModelController:
         _pipeline.append({"$match": _query})
         _pipeline.append({"$sort": _sort})
 
+        # Determine items per page
+        items_per_page = min(n_per_page or self.n_per_page, 250)
+
         # Add pagination data
-        _pipeline.append({"$skip": (page - 1) * self.n_per_page if page > 0 else 0})
-        _pipeline.append({"$limit": self.n_per_page})
+        _pipeline.append({"$skip": (page - 1) * items_per_page if page > 0 else 0})
+        _pipeline.append({"$limit": items_per_page})
 
         # Execute the aggregation
-        items = await _collection.aggregate(_pipeline).to_list(length=self.n_per_page)
+        items = await _collection.aggregate(_pipeline).to_list(length=items_per_page)
 
         # Count the total number of items
         total = await _collection.count_documents(_query)
 
-        pages = total // self.n_per_page
-        if total % self.n_per_page > 0:
+        pages = total // items_per_page
+        if total % items_per_page > 0:
             pages += 1
 
         # Convert items to models

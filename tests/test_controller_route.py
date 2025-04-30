@@ -402,6 +402,78 @@ class TestTaskRoutes:
         assert len(data["items"]) >= 1
         assert any(t["uuid"] == task.uuid for t in data["items"])
 
+    async def test_list_tasks_with_n_per_page(
+        self, client, auth_headers, db_engine, account
+    ):
+        """Test listing tasks with n_per_page parameter."""
+        # Create multiple tasks for testing pagination
+        project = await Project(db_engine).create(
+            {"name": "Test Project", "account_id": account.uuid},
+            claims={"account_id": account.uuid},
+        )
+
+        # Create 30 tasks
+        tasks = []
+        for i in range(30):
+            task = await Task(db_engine).create(
+                {
+                    "name": f"Task {i}",
+                    "description": f"Description {i}",
+                    "project_id": project.uuid,
+                    "account_id": account.uuid,
+                },
+                claims={"account_id": account.uuid},
+            )
+            tasks.append(task)
+
+        # Test default n_per_page (25)
+        response = client.get("/tasks/", headers=auth_headers)
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data["items"]) == 25  # Default page size
+        assert data["total"] == 30
+        assert data["page"] == 0
+        assert data["pages"] == 2  # 30 items / 25 per page = 2 pages
+
+        # Test custom n_per_page (10)
+        response = client.get("/tasks/?n_per_page=10", headers=auth_headers)
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data["items"]) == 10
+        assert data["total"] == 30
+        assert data["page"] == 0
+        assert data["pages"] == 3  # 30 items / 10 per page = 3 pages
+
+        # Test n_per_page exceeding max limit (300)
+        response = client.get("/tasks/?n_per_page=300", headers=auth_headers)
+        assert response.status_code == 422
+        assert response.json()["detail"][0]["type"] == "less_than_equal"
+        assert response.json()["detail"][0]["loc"] == ["query", "n_per_page"]
+        assert (
+            response.json()["detail"][0]["msg"]
+            == "Input should be less than or equal to 250"
+        )
+        assert response.json()["detail"][0]["input"] == "300"
+        assert response.json()["detail"][0]["ctx"]["le"] == 250
+
+        # Test pagination with custom n_per_page
+        response = client.get("/tasks/?n_per_page=10&page=1", headers=auth_headers)
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data["items"]) == 10
+        assert data["total"] == 30
+        assert data["page"] == 1
+        assert data["pages"] == 3
+
+        # Test last page with custom n_per_page
+        response = client.get("/tasks/?n_per_page=10&page=2", headers=auth_headers)
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data["items"]) == 10
+        assert data["total"] == 30
+        assert data["page"] == 2
+        assert data["pages"] == 3
+
     async def test_list_with_relations(
         self, client, auth_headers, account, project, task
     ):
