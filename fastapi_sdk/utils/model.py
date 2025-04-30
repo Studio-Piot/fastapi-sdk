@@ -28,7 +28,7 @@ class ShortUUID:
 ShortUUIDType = Annotated[str, StringConstraints(pattern=r"^[a-z]{3}_[a-zA-Z0-9]{10}$")]
 
 
-def convert_model_name(model_name: str) -> str:
+def convert_model_name(name: str) -> str:
     """Convert a model name from CamelCase to snake_case and remove 'model' suffix.
 
     Args:
@@ -37,9 +37,15 @@ def convert_model_name(model_name: str) -> str:
     Returns:
         The converted model name in snake_case without 'model' suffix
     """
-    # Convert to lowercase and remove model suffix
-    name = model_name.lower().replace("model", "")
-    # Convert CamelCase to snake_case
-    name = re.sub(r"(?<!^)(?=[A-Z])", "_", name).lower()
-    # Remove any remaining "model" word
-    return name.replace("_model", "")
+    # Remove the suffix 'Model' if it exists
+    if name.endswith("Model"):
+        name = name[:-5]
+
+    # Convert CamelCase (preserving acronyms like API) to snake_case
+    name = re.sub(
+        r"([A-Z]+)([A-Z][a-z])", r"\1_\2", name
+    )  # Handle acronym followed by capital-lowercase
+    name = re.sub(
+        r"([a-z\d])([A-Z])", r"\1_\2", name
+    )  # Handle lowercase/digit followed by uppercase
+    return name.lower()
