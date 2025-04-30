@@ -4,13 +4,14 @@ This module provides a base class for generating authenticated CRUD routes
 with database and user dependencies.
 """
 
-from typing import Any, Callable, Dict, List, Optional, Type
+from typing import Any, Callable, List, Optional, Type
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel
 
 from fastapi_sdk.controllers import ModelController
 from fastapi_sdk.security.permissions import require_permission
+from fastapi_sdk.utils.model import convert_model_name
 from fastapi_sdk.utils.schema import BaseResponsePaginated
 
 
@@ -67,8 +68,8 @@ class RouteController:
         self.allowed_query_fields = allowed_query_fields or []
         self.allowed_order_fields = allowed_order_fields or []
 
-        # Get model name for permissions
-        self.model_name = controller.model.__name__.lower().replace("model", "")
+        # Get model name from controller and convert it
+        self.model_name = convert_model_name(controller.model.__name__)
 
         self.router = APIRouter(prefix=prefix, tags=tags)
         self._setup_routes()
