@@ -635,6 +635,7 @@ You can filter results using query parameters. The system supports:
 - Contains matches (case-insensitive): `?name=*John*` (matches "John", "JOHN", "Johnson", etc.)
 - Multiple values: `?status=active,pending`
 - Range queries: `?created_at=2023-01-01..2023-12-31`
+- Custom page size: `?n_per_page=50` (number of items per page, max 250)
 
 Example:
 ```python
@@ -649,6 +650,40 @@ GET /accounts/?status=active,pending
 
 # List accounts created in a date range
 GET /accounts/?created_at=2023-01-01..2023-12-31
+
+# List accounts with custom page size
+GET /accounts/?n_per_page=50  # Get 50 items per page
+```
+
+### Pagination Parameters
+
+The RouteController supports several pagination parameters:
+
+1. **Page Size (`n_per_page`)**
+   - Controls the number of items per page
+   - Default value is 25
+   - Maximum value is 250
+   - Example: `GET /accounts/?n_per_page=50`
+
+2. **Page Number (`page`)**
+   - Zero-based page number
+   - Example: `GET /accounts/?page=1` (second page)
+
+3. **Combining Parameters**
+   ```python
+   # Get second page with 50 items per page
+   GET /accounts/?page=1&n_per_page=50
+   ```
+
+The response includes pagination metadata:
+```json
+{
+    "items": [...],
+    "total": 100,    // Total number of items
+    "page": 1,       // Current page number
+    "pages": 2,      // Total number of pages
+    "size": 50       // Number of items in current page
+}
 ```
 
 ### Query Syntax
@@ -1005,7 +1040,7 @@ account_routes = RouteController(
     controller=AccountController,
     get_db=get_db,
     schema_response=AccountResponse,
-    schema_response_paginated=BaseResponsePaginated[AccountResponse],
+    schema_response_paginated=AccountResponsePaginated,
     schema_create=AccountCreate,
     schema_update=AccountUpdate,
 )

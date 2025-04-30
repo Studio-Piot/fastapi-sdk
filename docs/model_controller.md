@@ -379,6 +379,25 @@ users = await User(db_engine).list(page=1)
 users = await User(db_engine).list(page=2, n_per_page=20)
 ```
 
+### Customizing Items Per Page
+
+You can customize the number of items per page in two ways:
+
+1. **Class-level Default**
+   ```python
+   class User(ModelController):
+       """User controller."""
+       n_per_page = 25  # Set default items per page to 25
+   ```
+
+2. **Per-Request Customization**
+   ```python
+   # Get first page with 50 items
+   users = await User(db_engine).list(page=0, n_per_page=50)
+   ```
+
+The `n_per_page` parameter has a maximum limit of 250 items per page. If a larger value is provided, it will be automatically capped at 250.
+
 ### Filter Results
 ```python
 # Filter users by email
