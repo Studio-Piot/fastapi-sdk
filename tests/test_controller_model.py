@@ -635,3 +635,89 @@ async def test_list_with_relations(db_engine: AgnosticDatabase):
     assert result["total"] >= 1
     account = next((a for a in result["items"] if a.uuid == account.uuid), None)
     assert account is not None
+
+
+@pytest.mark.asyncio
+async def test_task_with_assignees(db_engine: AgnosticDatabase):
+    """Test creating and updating tasks with assignees."""
+    # Create an account first
+    account = await Account(db_engine).create({"name": "Test Account"})
+    project = await Project(db_engine).create(
+        {
+            "name": "Test Project",
+            "account_id": account.uuid,
+        },
+        claims={"account_id": account.uuid},
+    )
+
+    # Create a task with assignees
+    task_data = {
+        "name": "Test Task",
+        "description": "A test task with assignees",
+        "project_id": project.uuid,
+        "account_id": account.uuid,
+        "assignees": [
+            {
+                "uuid": "asn_123",
+                "name": "John Doe",
+                "email": "john@example.com",
+            },
+            {
+                "uuid": "asn_456",
+                "name": "Jane Smith",
+                "email": "jane@example.com",
+            },
+        ],
+    }
+
+    # Create the task
+    task = await Task(db_engine).create(
+        task_data,
+        claims={"account_id": account.uuid},
+    )
+
+    assert task is not None
+    assert task.name == "Test Task"
+    assert len(task.assignees) == 2
+    assert task.assignees[0].name == "John Doe"
+    assert task.assignees[0].email == "john@example.com"
+    assert task.assignees[1].name == "Jane Smith"
+    assert task.assignees[1].email == "jane@example.com"
+
+    # Update the task with new assignees
+    updated_task_data = {
+        "name": "Updated Task",
+        "assignees": [
+            {
+                "uuid": "asn_789",
+                "name": "Bob Wilson",
+                "email": "bob@example.com",
+            },
+        ],
+    }
+
+    updated_task = await Task(db_engine).update(
+        task.uuid,
+        updated_task_data,
+        claims={"account_id": account.uuid},
+    )
+
+    assert updated_task is not None
+    assert updated_task.name == "Updated Task"
+    assert len(updated_task.assignees) == 1
+    assert updated_task.assignees[0].name == "Bob Wilson"
+    assert updated_task.assignees[0].email == "bob@example.com"
+
+    # Test updating with empty assignees list
+    empty_assignees_data = {
+        "assignees": [],
+    }
+
+    task_with_empty_assignees = await Task(db_engine).update(
+        task.uuid,
+        empty_assignees_data,
+        claims={"account_id": account.uuid},
+    )
+
+    assert task_with_empty_assignees is not None
+    assert len(task_with_empty_assignees.assignees) == 0

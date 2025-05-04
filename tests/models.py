@@ -46,6 +46,21 @@ class ProjectModel(Model):
     }
 
 
+class AssigneeModel(EmbeddedModel):
+    """Assignee model
+
+    This is an embedded model that is used to represent the assignee of a task.
+
+    - uuid: The uuid of the assignee.
+    - name: The name of the assignee.
+    - email: The email of the assignee.
+    """
+
+    uuid: str
+    name: str
+    email: str
+
+
 class TaskModel(Model):
     """Task model"""
 
@@ -54,7 +69,7 @@ class TaskModel(Model):
     uuid: ShortUUIDType = Field(default_factory=lambda: ShortUUID.generate("tsk"))
     account_id: str
     project_id: str
-    assignee_ids: Optional[List[str]] = Field(default=None)
+    assignees: Optional[List[AssigneeModel]] = Field(default=[])
     name: str
     description: Optional[str] = Field(default=None)
     status: Optional[TaskStatusOptions] = TaskStatusOptions.TO_DO

@@ -4,7 +4,7 @@ from datetime import UTC, datetime
 from typing import Any, Dict, List, Optional, Type, Union
 
 from fastapi import HTTPException
-from odmantic import AIOEngine, Model
+from odmantic import AIOEngine, EmbeddedModel, Model
 from pydantic import BaseModel
 
 from fastapi_sdk.utils.schema import datetime_now_sec
@@ -88,6 +88,35 @@ class ModelController:
 
         return {self.ownership_rule.model_field: claim_value} if claim_value else None
 
+    def _convert_embedded_model_lists(self, data_dict: dict) -> dict:
+        """Convert lists of embedded models in the data dictionary.
+
+        Args:
+            data_dict: The dictionary containing model data
+
+        Returns:
+            The dictionary with converted embedded model lists
+        """
+        for field, value in data_dict.items():
+            if isinstance(value, list) and hasattr(self.model, field):
+                # Get the field type from the model's __annotations__
+                field_type = self.model.__annotations__.get(field)
+                if (
+                    field_type
+                    and hasattr(field_type, "__origin__")
+                    and field_type.__origin__ is list
+                ):
+                    # Get the embedded model type
+                    embedded_model_type = field_type.__args__[0]
+                    if hasattr(embedded_model_type, "__base__") and issubclass(
+                        embedded_model_type.__base__, EmbeddedModel
+                    ):
+                        # Convert each item in the list to the embedded model type
+                        data_dict[field] = [
+                            embedded_model_type(**item) for item in value
+                        ]
+        return data_dict
+
     async def create(
         self, data: dict, claims: Optional[Dict[str, Any]] = None
     ) -> BaseModel:
@@ -119,6 +148,9 @@ class ModelController:
                             detail=f"Invalid {self.ownership_rule.model_field}",
                         )
 
+        # Convert lists of embedded models
+        data_dict = self._convert_embedded_model_lists(data_dict)
+
         model = self.model(**data_dict)
         model = await self.db_engine.save(model)
 
@@ -137,9 +169,14 @@ class ModelController:
             return None
 
         data = self.schema_update(**data)
+        data_dict = data.model_dump(exclude_unset=True)
+
+        # Convert lists of embedded models
+        data_dict = self._convert_embedded_model_lists(data_dict)
+
         # Update the fields submitted
-        for field in data.model_dump(exclude_unset=True):
-            setattr(model, field, data.model_dump()[field])
+        for field, value in data_dict.items():
+            setattr(model, field, value)
         model.updated_at = datetime_now_sec()
         model = await self.db_engine.save(model)
 

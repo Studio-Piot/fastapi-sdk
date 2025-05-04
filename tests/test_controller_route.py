@@ -545,6 +545,81 @@ class TestTaskRoutes:
         assert len(data["items"]) >= 1
         assert any(t["uuid"] == deleted_task.uuid for t in data["items"])
 
+    async def test_task_with_assignees(self, client, auth_headers, project, account):
+        """Test creating and updating tasks with assignees through API routes."""
+        # Create a task with assignees
+        task_data = {
+            "name": "Test Task",
+            "description": "A test task with assignees",
+            "project_id": project.uuid,
+            "account_id": account.uuid,
+            "assignees": [
+                {
+                    "uuid": "asn_123",
+                    "name": "John Doe",
+                    "email": "john@example.com",
+                },
+                {
+                    "uuid": "asn_456",
+                    "name": "Jane Smith",
+                    "email": "jane@example.com",
+                },
+            ],
+        }
+
+        # Create the task
+        response = client.post(
+            "/tasks/",
+            headers=auth_headers,
+            json=task_data,
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["name"] == "Test Task"
+        assert len(data["assignees"]) == 2
+        assert data["assignees"][0]["name"] == "John Doe"
+        assert data["assignees"][0]["email"] == "john@example.com"
+        assert data["assignees"][1]["name"] == "Jane Smith"
+        assert data["assignees"][1]["email"] == "jane@example.com"
+
+        # Update the task with new assignees
+        updated_task_data = {
+            "name": "Updated Task",
+            "assignees": [
+                {
+                    "uuid": "asn_789",
+                    "name": "Bob Wilson",
+                    "email": "bob@example.com",
+                },
+            ],
+        }
+
+        response = client.put(
+            f"/tasks/{data['uuid']}",
+            headers=auth_headers,
+            json=updated_task_data,
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["name"] == "Updated Task"
+        assert len(data["assignees"]) == 1
+        assert data["assignees"][0]["name"] == "Bob Wilson"
+        assert data["assignees"][0]["email"] == "bob@example.com"
+
+        # Test updating with empty assignees list
+        empty_assignees_data = {
+            "assignees": [],
+        }
+
+        response = client.put(
+            f"/tasks/{data['uuid']}",
+            headers=auth_headers,
+            json=empty_assignees_data,
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data["assignees"]) == 0
+
 
 @pytest.mark.asyncio
 class TestAuthenticationAndErrors:
