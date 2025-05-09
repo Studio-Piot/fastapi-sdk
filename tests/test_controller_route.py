@@ -147,7 +147,7 @@ class TestAccountRoutes:
         """Test deleting an account."""
         response = client.delete(f"/accounts/{account.uuid}", headers=auth_headers)
         assert response.status_code == 200
-        assert response.json() == {"message": "Resource soft deleted"}
+        assert response.json() == {"detail": "Resource soft deleted"}
 
     # TODO: Fix this test
     # Only a superuser can list all top level resources, so we need to mock a superuser
@@ -211,7 +211,7 @@ class TestProjectRoutes:
         """Test deleting a project."""
         response = client.delete(f"/projects/{project.uuid}", headers=auth_headers)
         assert response.status_code == 200
-        assert response.json() == {"message": "Resource soft deleted"}
+        assert response.json() == {"detail": "Resource soft deleted"}
 
     async def test_list_deleted_projects(self, client, auth_headers, deleted_project):
         """Test listing deleted projects."""
@@ -535,7 +535,7 @@ class TestTaskRoutes:
         """Test deleting a task."""
         response = client.delete(f"/tasks/{task.uuid}", headers=auth_headers)
         assert response.status_code == 200
-        assert response.json() == {"message": "Resource soft deleted"}
+        assert response.json() == {"detail": "Resource soft deleted"}
 
     async def test_list_deleted_tasks(self, client, auth_headers, deleted_task):
         """Test listing deleted tasks."""

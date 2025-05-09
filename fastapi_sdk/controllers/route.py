@@ -320,7 +320,7 @@ class RouteController:
                 claims=request.state.claims,
             ):
                 raise HTTPException(status_code=404, detail="Resource not found")
-            return {"message": "Resource soft deleted"}
+            return {"detail": "Resource soft deleted"}
 
     def _add_list_deleted_route(self) -> None:
         """Add list deleted route."""

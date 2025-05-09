@@ -51,12 +51,12 @@ def test_public_route(app, auth_middleware):
 
     @app.get("/public")
     async def public_route():
-        return {"message": "public"}
+        return {"detail": "public"}
 
     client = TestClient(app)
     response = client.get("/public")
     assert response.status_code == 200
-    assert response.json() == {"message": "public"}
+    assert response.json() == {"detail": "public"}
 
 
 def test_public_route_with_wildcard(app, auth_middleware):
@@ -64,20 +64,20 @@ def test_public_route_with_wildcard(app, auth_middleware):
 
     @app.get("/public/items")
     async def public_items_route():
-        return {"message": "public items"}
+        return {"detail": "public items"}
 
     @app.get("/public/users")
     async def public_users_route():
-        return {"message": "public users"}
+        return {"detail": "public users"}
 
     client = TestClient(app)
     response = client.get("/public/items")
     assert response.status_code == 200
-    assert response.json() == {"message": "public items"}
+    assert response.json() == {"detail": "public items"}
 
     response = client.get("/public/users")
     assert response.status_code == 200
-    assert response.json() == {"message": "public users"}
+    assert response.json() == {"detail": "public users"}
 
 
 def test_protected_route_with_valid_token(app, auth_middleware, test_token):
@@ -102,7 +102,7 @@ def test_protected_route_without_token(app, auth_middleware):
 
     @app.get("/protected")
     async def protected_route():
-        return {"message": "protected"}
+        return {"detail": "protected"}
 
     client = TestClient(app)
     response = client.get("/protected")
@@ -115,7 +115,7 @@ def test_protected_route_with_invalid_token(app, auth_middleware):
 
     @app.get("/protected")
     async def protected_route():
-        return {"message": "protected"}
+        return {"detail": "protected"}
 
     client = TestClient(app)
     response = client.get(
@@ -130,7 +130,7 @@ def test_protected_route_with_malformed_header(app, auth_middleware):
 
     @app.get("/protected")
     async def protected_route():
-        return {"message": "protected"}
+        return {"detail": "protected"}
 
     client = TestClient(app)
     response = client.get(
@@ -146,7 +146,7 @@ def test_protected_route_with_expired_token(app, auth_middleware):
 
     @app.get("/protected")
     async def protected_route():
-        return {"message": "protected"}
+        return {"detail": "protected"}
 
     # Create an expired token
     expired_token = create_access_token(
@@ -173,7 +173,7 @@ def test_protected_route_with_wrong_issuer(app, auth_middleware):
 
     @app.get("/protected")
     async def protected_route():
-        return {"message": "protected"}
+        return {"detail": "protected"}
 
     # Create a token with wrong issuer
     wrong_issuer_token = create_access_token(
@@ -200,7 +200,7 @@ def test_protected_route_with_wrong_client_id(app, auth_middleware):
 
     @app.get("/protected")
     async def protected_route():
-        return {"message": "protected"}
+        return {"detail": "protected"}
 
     # Create a token with wrong client ID
     wrong_client_token = create_access_token(
