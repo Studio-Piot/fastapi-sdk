@@ -3,17 +3,23 @@
 from datetime import timedelta
 
 import pytest
+from fastapi import HTTPException
 from motor.core import AgnosticDatabase
 
 from fastapi_sdk.controllers.route import RouteController
 from fastapi_sdk.utils.test import create_access_token
 from tests.config import settings
 from tests.controllers import Account, Project, Task
+from tests.db import get_db_engine
 from tests.schemas import (
     ProjectCreate,
     ProjectResponse,
     ProjectResponsePaginated,
     ProjectUpdate,
+    TaskCreate,
+    TaskResponse,
+    TaskResponsePaginated,
+    TaskUpdate,
 )
 
 
@@ -1037,3 +1043,55 @@ class TestPermissions:
 
         delete_response = client.delete(f"/projects/{project.uuid}", headers=headers)
         assert delete_response.status_code == 200
+
+    async def test_list_with_ignored_query_fields(
+        self, client, auth_headers, db_engine, account
+    ):
+        """Test listing with ignored query fields."""
+
+        # Create test data
+        project = await Project(db_engine).create(
+            {"name": "Test Project", "account_id": account.uuid},
+            claims={"account_id": account.uuid},
+        )
+
+        # Create a task
+        task = await Task(db_engine).create(
+            {
+                "name": "Test Task",
+                "description": "Test Description",
+                "project_id": project.uuid,
+                "account_id": account.uuid,
+            },
+            claims={"account_id": account.uuid},
+        )
+
+        # Test that ignored fields are not used in filtering
+        response = client.get(
+            "/tasks/?description=Test&name=Test",
+            headers=auth_headers,
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data["items"]) == 1  # Should return all tasks, ignoring the filters
+
+        # Test that allowed fields still work
+        response = client.get(
+            f"/tasks/?project_id={project.uuid}",
+            headers=auth_headers,
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data["items"]) == 1
+        assert data["items"][0]["uuid"] == task.uuid
+
+        # Test that non-allowed fields still raise an error
+        response = client.get(
+            "/tasks/?due_date=2024-01-01",
+            headers=auth_headers,
+        )
+        assert response.status_code == 400
+        assert (
+            "Invalid query field: due_date. Allowed fields: ['account_id', 'project_id', 'status']"
+            in response.json()["detail"]
+        )

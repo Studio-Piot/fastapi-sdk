@@ -32,6 +32,7 @@ class RouteController:
         include_routes: Optional[List[str]] = None,
         allowed_query_fields: Optional[List[str]] = None,
         allowed_order_fields: Optional[List[str]] = None,
+        ignored_query_fields: Optional[List[str]] = None,
     ):
         """Initialize the route controller.
 
@@ -48,6 +49,7 @@ class RouteController:
                           Valid options: ["create", "get", "list", "update", "delete", "list_deleted"]
             allowed_query_fields: Optional list of fields that can be used in query parameters
             allowed_order_fields: Optional list of fields that can be used for ordering
+            ignored_query_fields: Optional list of fields that should be ignored in query parameters
         """
         self.prefix = prefix
         self.tags = tags
@@ -67,6 +69,7 @@ class RouteController:
         ]
         self.allowed_query_fields = allowed_query_fields or []
         self.allowed_order_fields = allowed_order_fields or []
+        self.ignored_query_fields = ignored_query_fields or []
 
         # Get model name from controller and convert it
         self.model_name = convert_model_name(controller.model.__name__)
@@ -230,13 +233,17 @@ class RouteController:
             query_list = []
             for field, value in query_params.items():
                 # Skip special parameters that are handled separately
-                if field in [
-                    "page",
-                    "order_by",
-                    "order_direction",
-                    "include",
-                    "n_per_page",
-                ]:
+                if (
+                    field
+                    in [
+                        "page",
+                        "order_by",
+                        "order_direction",
+                        "include",
+                        "n_per_page",
+                    ]
+                    or field in self.ignored_query_fields
+                ):
                     continue
 
                 # Validate query field
@@ -337,3 +344,40 @@ class RouteController:
                 claims=request.state.claims,
             )
             return instances
+
+    def _get_query_filters(self, request: Request) -> List[dict]:
+        """Get the query filters from the request.
+
+        Args:
+            request: The request object
+
+        Returns:
+            A list of query filters
+        """
+        query_filters = []
+        for field, value in request.query_params.items():
+            # Skip pagination, ordering, and include parameters
+            if (
+                field
+                in [
+                    "page",
+                    "order_by",
+                    "order_direction",
+                    "include",
+                    "n_per_page",
+                ]
+                or field in self.ignored_query_fields
+            ):
+                continue
+
+            # Check if the field is allowed
+            if field not in self.allowed_query_fields:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Field {field} is not allowed in query parameters",
+                )
+
+            # Add the filter
+            query_filters.append({field: value})
+
+        return query_filters
