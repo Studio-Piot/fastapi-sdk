@@ -626,6 +626,57 @@ class TestTaskRoutes:
         data = response.json()
         assert len(data["assignees"]) == 0
 
+    async def test_order_tasks_by_project_name(
+        self, db_engine, client, auth_headers, account
+    ):
+        """Test ordering tasks by project name."""
+
+        project_a = await Project(db_engine).create(
+            {"name": "Test Project A", "account_id": account.uuid},
+            claims={"account_id": account.uuid},
+        )
+        project_b = await Project(db_engine).create(
+            {"name": "Test Project B", "account_id": account.uuid},
+            claims={"account_id": account.uuid},
+        )
+
+        # Create 5 tasks for project a
+        tasks = []
+        for i in range(5):
+            task = await Task(db_engine).create(
+                {
+                    "name": f"Task {i}",
+                    "description": f"Description {i}",
+                    "project_id": project_a.uuid,
+                    "account_id": account.uuid,
+                },
+                claims={"account_id": account.uuid},
+            )
+            tasks.append(task)
+
+        # Create 5 tasks for project b
+        for i in range(5):
+            task = await Task(db_engine).create(
+                {
+                    "name": f"Task {i}",
+                    "description": f"Description {i}",
+                    "project_id": project_b.uuid,
+                    "account_id": account.uuid,
+                },
+                claims={"account_id": account.uuid},
+            )
+            tasks.append(task)
+
+        response = client.get(
+            "/tasks/?order_by=project.name&include=project", headers=auth_headers
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data["items"]) >= 1
+        assert data["items"] == sorted(
+            data["items"], key=lambda x: x["project"]["name"]
+        )
+
 
 @pytest.mark.asyncio
 class TestAuthenticationAndErrors:

@@ -724,6 +724,27 @@ GET /accounts/?order_by=created_at&order_direction=desc
 GET /accounts/?order_by=name&order_direction=asc
 ```
 
+#### Ordering by Related Collections
+
+You can also order by fields from related collections by using dot notation. To do this:
+1. The related collection must be included in the `include` parameter
+2. The field must be in the `allowed_order_fields` list
+3. Use dot notation to specify the field (e.g., `project.name`)
+
+Example:
+```python
+# List tasks ordered by their project's name
+GET /tasks/?order_by=project.name&include=project&order_direction=asc
+
+# List projects ordered by their account's name
+GET /projects/?order_by=account.name&include=account&order_direction=desc
+```
+
+Note: When ordering by related collections:
+- The related collection must be included in the `include` parameter
+- The ordering is done after the related collections are loaded
+- Performance may be affected when ordering by related collections with large datasets
+
 ### Combining Parameters
 
 You can combine query and order parameters:

@@ -58,6 +58,6 @@ task_routes = RouteController(
     schema_create=TaskCreate,
     schema_update=TaskUpdate,
     allowed_query_fields=["account_id", "project_id", "status"],
-    allowed_order_fields=["created_at", "due_date", "status"],
+    allowed_order_fields=["created_at", "due_date", "status", "project.name"],
     ignored_query_fields=["description", "name"],
 )
