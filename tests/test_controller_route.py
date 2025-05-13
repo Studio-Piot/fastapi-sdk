@@ -115,7 +115,7 @@ class TestAccountRoutes:
             headers=auth_headers,
             json={"name": "Test Account"},
         )
-        assert response.status_code == 200
+        assert response.status_code == 201
         data = response.json()
         assert data["name"] == "Test Account"
         assert "uuid" in data
@@ -180,7 +180,7 @@ class TestProjectRoutes:
                 "account_id": account.uuid,
             },
         )
-        assert response.status_code == 200
+        assert response.status_code == 201
         data = response.json()
         assert data["name"] == "Test Project"
         assert data["account_id"] == account.uuid
@@ -348,7 +348,7 @@ class TestTaskRoutes:
                 "account_id": account.uuid,
             },
         )
-        assert response.status_code == 200
+        assert response.status_code == 201
         data = response.json()
         assert data["description"] == "Test Description"
         assert data["project_id"] == project.uuid
@@ -579,7 +579,7 @@ class TestTaskRoutes:
             headers=auth_headers,
             json=task_data,
         )
-        assert response.status_code == 200
+        assert response.status_code == 201
         data = response.json()
         assert data["name"] == "Test Task"
         assert len(data["assignees"]) == 2
@@ -732,7 +732,7 @@ class TestOwnership:
             json=data,
             headers=auth_headers,
         )
-        assert response.status_code == 200
+        assert response.status_code == 201
         result = response.json()
         assert result["name"] == "Test Project"
         assert result["account_id"] == account_claims["account_id"]
@@ -997,7 +997,7 @@ class TestPermissions:
             headers=auth_headers,
             json={"name": "Test Project", "account_id": account.uuid},
         )
-        assert response.status_code == 200
+        assert response.status_code == 201
 
     async def test_create_without_permission(
         self, client, account, auth_headers_no_permissions
@@ -1080,7 +1080,7 @@ class TestPermissions:
             headers=headers,
             json={"name": "Test Project", "account_id": account.uuid},
         )
-        assert create_response.status_code == 200
+        assert create_response.status_code == 201
 
         read_response = client.get(f"/projects/{project.uuid}", headers=headers)
         assert read_response.status_code == 200

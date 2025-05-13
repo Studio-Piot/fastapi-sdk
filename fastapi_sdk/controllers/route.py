@@ -100,7 +100,7 @@ class RouteController:
     def _add_create_route(self) -> None:
         """Add create route."""
 
-        @self.router.post("/", response_model=self.schema_response)
+        @self.router.post("/", response_model=self.schema_response, status_code=201)
         @require_permission(f"{self.model_name}:create")
         async def create_route(
             request: Request,
