@@ -14,6 +14,8 @@ class AccountModel(Model):
 
     created_at: datetime
     updated_at: datetime
+    created_by: Optional[str] = Field(default=None)
+    updated_by: Optional[str] = Field(default=None)
     uuid: ShortUUIDType = Field(default_factory=lambda: ShortUUID.generate("acc"))
     name: Optional[str] = Field(default=None)
     deleted: bool = False

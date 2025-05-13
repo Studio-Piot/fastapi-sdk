@@ -2,13 +2,18 @@
 
 import time
 from datetime import UTC
+from typing import Any, Dict, Optional
+from unittest.mock import AsyncMock, patch
 
 import pytest
 from fastapi import HTTPException
 from motor.core import AgnosticDatabase
+from odmantic import Model
 
 from fastapi_sdk.controllers import ModelController
 from tests.controllers import Account, Project, PublicController, Task
+from tests.models import AccountModel
+from tests.schemas import AccountCreate, AccountUpdate
 
 
 @pytest.fixture(autouse=True)
@@ -721,3 +726,127 @@ async def test_task_with_assignees(db_engine: AgnosticDatabase):
 
     assert task_with_empty_assignees is not None
     assert len(task_with_empty_assignees.assignees) == 0
+
+
+@pytest.mark.asyncio
+class TestControllerHooks:
+    """Test controller hooks functionality."""
+
+    class HookTestController(ModelController):
+        """Test controller with hook implementations."""
+
+        model = AccountModel
+        schema_create = AccountCreate
+        schema_update = AccountUpdate
+
+        def __init__(self, db_engine):
+            """Initialize with mock notification function."""
+            super().__init__(db_engine)
+            self.notify = AsyncMock()
+
+        async def before_create(
+            self, data_dict: dict, claims: Optional[Dict[str, Any]] = None
+        ) -> dict:
+            """Add extra field before creation."""
+            if claims and "user_id" in claims:
+                data_dict["created_by"] = claims["user_id"]
+            return data_dict
+
+        async def after_create(self, obj: Model) -> Model:
+            """Add after creation send notification."""
+            await self.notify(
+                event_type="account_created", account_id=obj.uuid, account_name=obj.name
+            )
+            return obj
+
+        async def before_update(
+            self, data_dict: dict, claims: Optional[Dict[str, Any]] = None
+        ) -> dict:
+            """Add extra field before update."""
+            if claims and "user_id" in claims:
+                data_dict["updated_by"] = claims["user_id"]
+            return data_dict
+
+        async def after_update(self, obj: Model) -> Model:
+            """Add after update send notification."""
+            await self.notify(
+                event_type="account_updated", account_id=obj.uuid, account_name=obj.name
+            )
+            return obj
+
+    async def test_create_hooks(self, db_engine: AgnosticDatabase):
+        """Test before_create and after_create hooks."""
+        controller = self.HookTestController(db_engine)
+        claims = {"user_id": "test_user"}
+
+        # Create a model with hooks
+        model = await controller.create({"name": "Test Account"}, claims=claims)
+
+        # Verify before_create hook effects
+        assert model.created_by == "test_user"
+
+        # Verify notification was sent
+        controller.notify.assert_called_once_with(
+            event_type="account_created",
+            account_id=model.uuid,
+            account_name="Test Account",
+        )
+
+    async def test_update_hooks(self, db_engine: AgnosticDatabase):
+        """Test before_update and after_update hooks."""
+        controller = self.HookTestController(db_engine)
+        claims = {"user_id": "test_user"}
+
+        # First create a model
+        model = await controller.create({"name": "Test Account"}, claims=claims)
+
+        # Reset mock to clear create notification
+        controller.notify.reset_mock()
+
+        # Update the model with hooks
+        updated_model = await controller.update(
+            model.uuid, {"name": "Updated Account"}, claims=claims
+        )
+
+        # Verify before_update hook effects
+        assert updated_model.updated_by == "test_user"
+
+        # Verify notification was sent
+        controller.notify.assert_called_once_with(
+            event_type="account_updated",
+            account_id=updated_model.uuid,
+            account_name="Updated Account",
+        )
+
+    async def test_hooks_without_claims(self, db_engine: AgnosticDatabase):
+        """Test hooks behavior without claims."""
+        controller = self.HookTestController(db_engine)
+
+        # Create a model without claims
+        model = await controller.create({"name": "Test Account"})
+
+        # Verify before_create hook effects without claims
+        assert model.created_by is None
+
+        # Verify create notification was sent
+        controller.notify.assert_called_once_with(
+            event_type="account_created",
+            account_id=model.uuid,
+            account_name="Test Account",
+        )
+
+        # Reset mock to clear create notification
+        controller.notify.reset_mock()
+
+        # Update without claims
+        updated_model = await controller.update(model.uuid, {"name": "Updated Account"})
+
+        # Verify before_update hook effects without claims
+        assert updated_model.updated_by is None
+
+        # Verify update notification was sent
+        controller.notify.assert_called_once_with(
+            event_type="account_updated",
+            account_id=updated_model.uuid,
+            account_name="Updated Account",
+        )

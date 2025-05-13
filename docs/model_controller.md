@@ -252,7 +252,53 @@ When using the `include` parameter, the response will include the related object
 
 ## Hooks
 
-The ModelController provides hooks that can be overridden to add custom behavior after create and update operations.
+The ModelController provides hooks that can be overridden to add custom behavior before and after create and update operations.
+
+### Before Create Hook
+
+The `before_create` hook is called before a model is created and saved to the database. This is useful for:
+- Adding computed fields
+- Setting default values
+- Adding user-specific data from claims
+- Performing pre-creation validations
+- Modifying input data
+
+Example:
+```python
+class UserController(ModelController):
+    model = UserModel
+    schema_create = UserCreate
+    schema_update = UserUpdate
+
+    async def before_create(self, data_dict: dict, claims: Optional[Dict[str, Any]] = None) -> dict:
+        """Before create hook to add user-specific data."""
+        if claims and "user_id" in claims:
+            data_dict["created_by"] = claims["user_id"]
+        return data_dict
+```
+
+### Before Update Hook
+
+The `before_update` hook is called before a model is updated and saved to the database. This is useful for:
+- Adding audit fields
+- Setting modification timestamps
+- Adding user-specific data from claims
+- Performing pre-update validations
+- Modifying update data
+
+Example:
+```python
+class UserController(ModelController):
+    model = UserModel
+    schema_create = UserCreate
+    schema_update = UserUpdate
+
+    async def before_update(self, data_dict: dict, claims: Optional[Dict[str, Any]] = None) -> dict:
+        """Before update hook to add audit fields."""
+        if claims and "user_id" in claims:
+            data_dict["updated_by"] = claims["user_id"]
+        return data_dict
+```
 
 ### After Create Hook
 
@@ -314,6 +360,10 @@ class RoleController(ModelController):
 4. **Performance**: Keep hooks lightweight to avoid impacting response times
 5. **Idempotency**: Design hooks to be idempotent when possible
 6. **Documentation**: Document the purpose and behavior of hooks
+7. **Claims Handling**: Always check if claims exist before accessing them
+8. **Data Modification**: Be careful when modifying input data in before hooks
+9. **Validation**: Use before hooks for input validation when needed
+10. **Side Effects**: Use after hooks for side effects like notifications
 
 ## Relationships
 

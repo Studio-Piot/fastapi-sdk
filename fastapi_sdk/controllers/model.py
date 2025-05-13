@@ -151,6 +151,10 @@ class ModelController:
         # Convert lists of embedded models
         data_dict = self._convert_embedded_model_lists(data_dict)
 
+        # Call before_create hook if implemented
+        if hasattr(self, "before_create"):
+            data_dict = await self.before_create(data_dict, claims)
+
         model = self.model(**data_dict)
         model = await self.db_engine.save(model)
 
@@ -173,6 +177,10 @@ class ModelController:
 
         # Convert lists of embedded models
         data_dict = self._convert_embedded_model_lists(data_dict)
+
+        # Call before_update hook if implemented
+        if hasattr(self, "before_update"):
+            data_dict = await self.before_update(data_dict, claims)
 
         # Update the fields submitted
         for field, value in data_dict.items():
@@ -213,6 +221,40 @@ class ModelController:
             The modified model instance
         """
         return obj
+
+    async def before_create(
+        self, data_dict: dict, claims: Optional[Dict[str, Any]] = None
+    ) -> dict:
+        """Hook called before creating a model.
+
+        Override this method in your controller to modify the data dictionary before creation.
+        The method should return the modified data dictionary.
+
+        Args:
+            data_dict: The data dictionary to be used for model creation
+            claims: Optional claims from the JWT token
+
+        Returns:
+            The modified data dictionary
+        """
+        return data_dict
+
+    async def before_update(
+        self, data_dict: dict, claims: Optional[Dict[str, Any]] = None
+    ) -> dict:
+        """Hook called before updating a model.
+
+        Override this method in your controller to modify the data dictionary before update.
+        The method should return the modified data dictionary.
+
+        Args:
+            data_dict: The data dictionary to be used for model update
+            claims: Optional claims from the JWT token
+
+        Returns:
+            The modified data dictionary
+        """
+        return data_dict
 
     async def get(
         self,
