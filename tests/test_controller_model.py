@@ -116,6 +116,17 @@ async def test_model_controller(db_engine: AgnosticDatabase):
     assert deleted_account is not None
     assert deleted_account.deleted is True
 
+    # List deleted accounts
+    deleted_accounts = await Account(db_engine).list(
+        deleted=True, claims={"account_id": account_1.uuid}
+    )
+    assert len(deleted_accounts["items"]) == 1
+    assert deleted_accounts["items"][0].uuid == account_1.uuid
+    assert deleted_accounts["items"][0].deleted is True
+    assert deleted_accounts["total"] == 1
+    assert deleted_accounts["page"] == 0
+    assert deleted_accounts["pages"] == 1
+
     # Update deleted account
     deleted_account = await Account(db_engine).update(
         uuid=account_1.uuid,

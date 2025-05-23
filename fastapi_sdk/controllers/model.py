@@ -1,7 +1,6 @@
 """Controller module for crud operations."""
 
-from datetime import UTC, datetime
-from typing import Any, Dict, List, Optional, Type, Union
+from typing import Any, Dict, List, Optional, Type
 
 from fastapi import HTTPException
 from odmantic import AIOEngine, EmbeddedModel, Model
@@ -326,6 +325,7 @@ class ModelController:
         claims: Optional[Dict[str, Any]] = None,
         include: Optional[List[str]] = None,
         n_per_page: Optional[int] = None,
+        deleted: bool = False,
     ) -> List[BaseModel]:
         """List models.
 
@@ -336,6 +336,7 @@ class ModelController:
             claims: Optional claims for ownership verification
             include: Optional list of related objects to include
             n_per_page: Optional number of items per page (max 250)
+            deleted: If True, only return deleted items. If False, only return non-deleted items.
         """
         # Get the collection
         collection_name = (
@@ -346,8 +347,8 @@ class ModelController:
         # Create a pipeline for aggregation
         _pipeline = []
 
-        # Filter out deleted models by default
-        _query = {"deleted": False}
+        # Filter by deleted status
+        _query = {"deleted": deleted}
         if query:
             for q in query:
                 _query.update(q)
