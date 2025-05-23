@@ -79,21 +79,21 @@ def decode_access_token(
 
         # Check if issuer matches auth_issuer
         if claims.get("iss") != auth_issuer:
-            logger.error("Token issuer does not match auth_issuer")
+            logger.info("Token issuer does not match auth_issuer")
             raise ValueError("Token issuer does not match auth_issuer")
 
         # Check if tenant_id matches auth_client_id
         if claims.get("tenant_id") != auth_client_id:
-            logger.error("Token tenant_id does not match auth_client_id")
+            logger.info("Token tenant_id does not match auth_client_id")
             raise ValueError("Token tenant_id does not match auth_client_id")
 
         return claims
     except ExpiredTokenError as e:
-        logger.error("Token has expired")
+        logger.info("Token has expired")
         raise ValueError("Token has expired") from e
     except BadSignatureError as e:
-        logger.error("Invalid token signature")
+        logger.info("Invalid token signature")
         raise ValueError("Invalid token signature") from e
     except Exception as e:
-        logger.error("Token verification failed: %s", e)
+        logger.info("Token verification failed: %s", e)
         raise ValueError(f"Token verification failed: {str(e)}") from e
