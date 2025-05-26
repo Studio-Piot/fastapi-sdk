@@ -455,6 +455,49 @@ class ModelController:
         result = await self.list(query=[{foreign_key: value}], claims=claims)
         return result["items"]
 
+    async def count(
+        self,
+        query: Optional[List[dict]] = None,
+        claims: Optional[Dict[str, Any]] = None,
+        deleted: bool = False,
+    ) -> int:
+        """Count models matching the query.
+
+        Args:
+            query: Optional query filters
+            claims: Optional claims for ownership verification
+            deleted: If True, only count deleted items. If False, only count non-deleted items.
+
+        Returns:
+            The total count of matching items
+        """
+        # Get the collection
+        collection_name = (
+            self.model.model_config.get("collection") or self.model.__collection__
+        )
+        _collection = self.db_engine.database[collection_name]
+
+        # Build the query
+        _query = {"deleted": deleted}
+        if query:
+            for q in query:
+                _query.update(q)
+
+        # Apply ownership filter if rule exists
+        if self.ownership_rule:
+            if not self.ownership_rule.allow_public and not claims:
+                raise HTTPException(
+                    status_code=403,
+                    detail="Claims must be provided when ownership rule is set and allow_public is False",
+                )
+            if claims:
+                ownership_filter = self._get_ownership_filter(claims)
+                if ownership_filter:
+                    _query.update(ownership_filter)
+
+        # Count the documents
+        return await _collection.count_documents(_query)
+
     async def get_with_relations(
         self,
         uuid: str,

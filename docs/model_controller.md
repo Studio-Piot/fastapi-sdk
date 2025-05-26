@@ -668,6 +668,32 @@ Creates a new model instance with the provided data.
 **Returns:**
 - The created model instance
 
+#### `count(query: Optional[List[dict]] = None, claims: Optional[Dict[str, Any]] = None, deleted: bool = False) -> int`
+Counts the number of models matching the query criteria.
+
+**Parameters:**
+- `query`: Optional list of query dictionaries for filtering
+- `claims`: Optional user claims for ownership verification
+- `deleted`: If True, only count deleted items. If False, only count non-deleted items
+
+**Returns:**
+- Integer representing the total count of matching items
+
+**Example:**
+```python
+# Count all non-deleted items
+total = await controller.count()
+
+# Count deleted items
+deleted_count = await controller.count(deleted=True)
+
+# Count with query
+active_count = await controller.count(
+    query=[{"status": "active"}],
+    claims={"account_id": "acc_123"}
+)
+```
+
 #### `get(uuid: str, claims: Optional[Dict[str, Any]] = None, include_deleted: bool = False) -> Optional[BaseModel]`
 Retrieves a single model by UUID.
 

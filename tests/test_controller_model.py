@@ -143,6 +143,25 @@ async def test_model_controller(db_engine: AgnosticDatabase):
     assert accounts["page"] == 0
     assert accounts["pages"] == 1
 
+    # Test count method
+    # Count all non-deleted accounts
+    total_accounts = await Account(db_engine).count(
+        claims={"account_id": account_2.uuid}
+    )
+    assert total_accounts == 1
+
+    # Count deleted accounts
+    deleted_count = await Account(db_engine).count(
+        deleted=True, claims={"account_id": account_1.uuid}
+    )
+    assert deleted_count == 1
+
+    # Count with query
+    query_count = await Account(db_engine).count(
+        query=[{"name": "Account 2"}], claims={"account_id": account_2.uuid}
+    )
+    assert query_count == 1
+
     # Undelete account
     undeleted_account = await Account(db_engine).undelete(
         uuid=account_1.uuid, claims={"account_id": account_1.uuid}
@@ -150,6 +169,12 @@ async def test_model_controller(db_engine: AgnosticDatabase):
     assert undeleted_account is not None
     assert undeleted_account.deleted is False
     assert undeleted_account.uuid == account_1.uuid
+
+    # Count with superuser claims
+    superuser_count = await Account(db_engine).count(
+        claims={"account_id": account_2.uuid, "roles": ["superuser"]}
+    )
+    assert superuser_count == 2
 
     # Verify account is now accessible without include_deleted
     restored_account = await Account(db_engine).get(
