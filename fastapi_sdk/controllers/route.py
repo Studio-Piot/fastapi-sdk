@@ -278,8 +278,20 @@ class RouteController:
                     elif ":" in value:
                         operator, val = value.split(":", 1)
                         if operator in ["gt", "lt", "gte", "lte"]:
-                            mongo_operator = f"${operator}"
-                            query_list.append({field: {mongo_operator: val}})
+                            try:
+                                # Try to convert to float first (handles both integers and decimals)
+                                numeric_val = float(val)
+                                # If it's a whole number, convert to int
+                                if numeric_val.is_integer():
+                                    numeric_val = int(numeric_val)
+                                mongo_operator = f"${operator}"
+                                query_list.append(
+                                    {field: {mongo_operator: numeric_val}}
+                                )
+                            except ValueError:
+                                # If conversion fails, use the string value directly
+                                mongo_operator = f"${operator}"
+                                query_list.append({field: {mongo_operator: val}})
                         else:
                             raise HTTPException(
                                 status_code=400,
