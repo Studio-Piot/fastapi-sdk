@@ -274,6 +274,17 @@ class RouteController:
                                 }
                             }
                         )
+                    # Handle comparison operators (e.g., age=gt:18, price=lt:100)
+                    elif ":" in value:
+                        operator, val = value.split(":", 1)
+                        if operator in ["gt", "lt", "gte", "lte"]:
+                            mongo_operator = f"${operator}"
+                            query_list.append({field: {mongo_operator: val}})
+                        else:
+                            raise HTTPException(
+                                status_code=400,
+                                detail=f"Invalid comparison operator: {operator}. Allowed operators: gt, lt, gte, lte",
+                            )
                     # Handle exact match (default)
                     else:
                         query_list.append({field: value})

@@ -6,7 +6,7 @@ from typing import List, Optional
 from odmantic import EmbeddedModel, Field, Index, Model
 
 from fastapi_sdk.utils.model import ShortUUID, ShortUUIDType
-from tests.constants import TaskStatusOptions
+from tests.constants import ProjectStatusOptions, TaskStatusOptions
 
 
 class AccountModel(Model):
@@ -40,6 +40,7 @@ class ProjectModel(Model):
     account: Optional["AccountModel"] = Field(default=None)
     tasks: Optional[List["TaskModel"]] = Field(default=None)
     latest_task: Optional["TaskModel"] = Field(default=None)
+    status: Optional[ProjectStatusOptions] = ProjectStatusOptions.ACTIVE
 
     model_config = {
         "indexes": lambda: [

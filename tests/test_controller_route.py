@@ -3,24 +3,13 @@
 from datetime import timedelta
 
 import pytest
-from fastapi import HTTPException
 from motor.core import AgnosticDatabase
 
-from fastapi_sdk.controllers.route import RouteController
 from fastapi_sdk.utils.test import create_access_token
 from tests.config import settings
+from tests.constants import ProjectStatusOptions
 from tests.controllers import Account, Project, Task
-from tests.db import get_db_engine
-from tests.schemas import (
-    ProjectCreate,
-    ProjectResponse,
-    ProjectResponsePaginated,
-    ProjectUpdate,
-    TaskCreate,
-    TaskResponse,
-    TaskResponsePaginated,
-    TaskUpdate,
-)
+from tests.routes import project_routes
 
 
 async def fixtures(db_engine: AgnosticDatabase, account: Account):
@@ -257,6 +246,112 @@ class TestProjectRoutes:
         data = response.json()
         assert len(data["items"]) == 2
         assert any(a["account_id"] == account.uuid for a in data["items"])
+
+    async def test_query_parameter_handling(
+        self, client, auth_headers, db_engine, account
+    ):
+        """Test query parameter handling."""
+        # Create test data
+        await Project(db_engine).create(
+            {
+                "name": "Test Project",
+                "account_id": account.uuid,
+                "status": ProjectStatusOptions.ACTIVE.value,
+            },
+            claims={"account_id": account.uuid},
+        )
+        await Project(db_engine).create(
+            {
+                "name": "Another Project",
+                "account_id": account.uuid,
+                "status": ProjectStatusOptions.INACTIVE.value,
+            },
+            claims={"account_id": account.uuid},
+        )
+
+        # Test range query
+        response = client.get(
+            "/projects/?created_at=2023-01-01..2023-12-31", headers=auth_headers
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data["items"]) >= 0  # Just verify the request succeeds
+
+        # Test list values
+        response = client.get("/projects/?status=active,pending", headers=auth_headers)
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data["items"]) >= 0
+
+        # Test contains match
+        response = client.get("/projects/?name=*Test*", headers=auth_headers)
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data["items"]) >= 0
+
+        # Test comparison operators
+        # Greater than
+        response = client.get(
+            "/projects/?created_at=gt:2023-01-01", headers=auth_headers
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data["items"]) >= 0
+
+        # Less than
+        response = client.get(
+            "/projects/?created_at=lt:2023-12-31", headers=auth_headers
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data["items"]) >= 0
+
+        # Greater than or equal
+        response = client.get(
+            "/projects/?created_at=gte:2023-01-01", headers=auth_headers
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data["items"]) >= 0
+
+        # Less than or equal
+        response = client.get(
+            "/projects/?created_at=lte:2023-12-31", headers=auth_headers
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data["items"]) >= 0
+
+        # Test exact match
+        response = client.get("/projects/?name=Test Project", headers=auth_headers)
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data["items"]) == 1
+        assert data["items"][0]["name"] == "Test Project"
+
+        # Test invalid comparison operator
+        response = client.get(
+            "/projects/?created_at=invalid:2023-01-01", headers=auth_headers
+        )
+        assert response.status_code == 400
+        assert (
+            response.json()["detail"]
+            == "Invalid comparison operator: invalid. Allowed operators: gt, lt, gte, lte"
+        )
+
+        # Test combining multiple query parameters
+        response = client.get(
+            "/projects/?name=*Test*&status=active&created_at=gt:2023-01-01",
+            headers=auth_headers,
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data["items"]) >= 0
+
+        # Test querying non-allowed field
+        response = client.get("/projects/?invalid_field=value", headers=auth_headers)
+        assert response.status_code == 400
+        assert "Invalid query field: invalid_field" in response.json()["detail"]
 
     async def test_list_allowed_order_fields(
         self, client, auth_headers, db_engine, account

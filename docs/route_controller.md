@@ -433,7 +433,7 @@ account_routes = RouteController(
     controller=AccountController,
     get_db=get_db,
     schema_response=AccountResponse,
-    schema_response_paginated=BaseResponsePaginated[AccountResponse],
+    schema_response_paginated=AccountResponsePaginated,
     schema_create=AccountCreate,
     schema_update=AccountUpdate,
 )
@@ -630,30 +630,120 @@ account_routes = RouteController(
 
 ### Query Parameters
 
-You can filter results using query parameters. The system supports:
-- Exact matches: `?name=John` (matches exactly "John")
-- Contains matches (case-insensitive): `?name=*John*` (matches "John", "JOHN", "Johnson", etc.)
-- Multiple values: `?status=active,pending`
-- Range queries: `?created_at=2023-01-01..2023-12-31`
-- Custom page size: `?n_per_page=50` (number of items per page, max 250)
+You can filter results using query parameters. The system supports several types of queries:
 
-Example:
+1. **Exact Match (Default)**
+   ```python
+   # Match exact value
+   GET /projects/?name=Test Project
+   GET /projects/?status=active
+   ```
+
+2. **Contains Match (Case-insensitive)**
+   ```python
+   # Match text containing the value (case-insensitive)
+   GET /projects/?name=*test*
+   # Will match: "Test Project", "Testing", "TEST", etc.
+   ```
+
+3. **Multiple Values**
+   ```python
+   # Match any of the provided values
+   GET /projects/?status=active,pending
+   # Will match projects with status either "active" or "pending"
+   ```
+
+4. **Range Queries**
+   ```python
+   # Match values within a range
+   GET /projects/?created_at=2023-01-01..2023-12-31
+   # Will match projects created between Jan 1 and Dec 31, 2023
+   ```
+
+5. **Comparison Operators**
+   ```python
+   # Greater than
+   GET /projects/?created_at=gt:2023-01-01
+   
+   # Less than
+   GET /projects/?created_at=lt:2023-12-31
+   
+   # Greater than or equal
+   GET /projects/?created_at=gte:2023-01-01
+   
+   # Less than or equal
+   GET /projects/?created_at=lte:2023-12-31
+   ```
+
+6. **Combining Multiple Parameters**
+   ```python
+   # Combine different query types
+   GET /projects/?name=*test*&status=active&created_at=gt:2023-01-01
+   # Will match active projects with "test" in the name created after Jan 1, 2023
+   ```
+
+#### Query Parameter Rules
+
+1. **Field Validation**
+   - Only fields listed in `allowed_query_fields` can be used in queries
+   - Attempting to query non-allowed fields returns a 400 error
+   - Example error: `Invalid query field: invalid_field. Allowed fields: ['name', 'status', 'created_at']`
+
+2. **Comparison Operators**
+   - Supported operators: `gt`, `lt`, `gte`, `lte`
+   - Format: `field=operator:value`
+   - Invalid operators return a 400 error
+   - Example error: `Invalid comparison operator: invalid. Allowed operators: gt, lt, gte, lte`
+
+3. **Contains Match**
+   - Use `*value*` syntax
+   - Case-insensitive by default
+   - Useful for text search and fuzzy matching
+
+4. **Multiple Values**
+   - Use comma-separated values
+   - Matches any of the provided values
+   - Useful for enum-like fields (e.g., status)
+
+5. **Range Queries**
+   - Use `start..end` syntax
+   - Inclusive range (includes both start and end values)
+   - Works with dates, numbers, and other comparable values
+
+#### Example Usage
+
 ```python
-# List accounts with exact name match
-GET /accounts/?name=John
+# Complex query example
+GET /projects/?name=*test*&status=active,pending&created_at=2023-01-01..2023-12-31&updated_at=gt:2023-06-01
 
-# List accounts with name containing "john" (case-insensitive)
-GET /accounts/?name=*john*
-
-# List accounts with specific status
-GET /accounts/?status=active,pending
-
-# List accounts created in a date range
-GET /accounts/?created_at=2023-01-01..2023-12-31
-
-# List accounts with custom page size
-GET /accounts/?n_per_page=50  # Get 50 items per page
+# This query will match projects that:
+# - Have "test" in their name (case-insensitive)
+# - Have status either "active" or "pending"
+# - Were created in 2023
+# - Were updated after June 1, 2023
 ```
+
+#### Best Practices
+
+1. **Performance**
+   - Use exact matches when possible
+   - Avoid contains matches on large text fields
+   - Add appropriate indexes for frequently queried fields
+
+2. **Query Complexity**
+   - Keep queries simple and focused
+   - Avoid combining too many conditions
+   - Use appropriate query types for each field
+
+3. **Error Handling**
+   - Handle 400 errors for invalid queries
+   - Validate query parameters before sending
+   - Provide clear error messages to users
+
+4. **Security**
+   - Only allow querying on safe fields
+   - Validate and sanitize query values
+   - Use appropriate access control
 
 ### Pagination Parameters
 
@@ -1037,6 +1127,7 @@ class AccountController(ModelController):
     ]
 
     # The pipeline will be automatically applied to all list queries
+```
 
 # FastAPI app
 app = FastAPI()
@@ -1067,5 +1158,4 @@ account_routes = RouteController(
 )
 
 # Include routes
-app.include_router(account_routes.router)
-``` 
+app.include_router(account_routes.router) 

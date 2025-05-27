@@ -3,6 +3,13 @@
 from enum import Enum
 
 
+class ProjectStatusOptions(str, Enum):
+    """Available project status options"""
+
+    ACTIVE = "ACTIVE"  # "Active"
+    INACTIVE = "INACTIVE"  # "Inactive"
+
+
 class TaskStatusOptions(str, Enum):
     """Available task status options"""
 
