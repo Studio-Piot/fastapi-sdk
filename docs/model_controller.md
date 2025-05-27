@@ -250,6 +250,11 @@ When using the `include` parameter, the response will include the related object
    - Consider implementing caching for frequently accessed relations
    - Use appropriate cache invalidation strategies when related objects change
 
+5. **Documentation**
+   - Document available relations in your API documentation
+   - Provide examples of common include patterns
+   - Explain any performance implications of including specific relations
+
 ## Hooks
 
 The ModelController provides hooks that can be overridden to add custom behavior before and after create and update operations.
@@ -852,4 +857,187 @@ Gets a controller class from the registry.
 5. **Documentation**
    - Document available relations in your API documentation
    - Provide examples of common include patterns
-   - Explain any performance implications of including specific relations 
+   - Explain any performance implications of including specific relations
+
+## Advanced Features
+
+### Custom Aggregation Pipeline
+
+The ModelController supports custom MongoDB aggregation pipeline stages through the `extra_pipeline` class attribute. This allows you to add complex aggregation operations to your queries.
+
+#### Using extra_pipeline
+
+```python
+class UserController(ModelController):
+    model = UserModel
+    schema_create = UserCreate
+    schema_update = UserUpdate
+
+    # Define custom pipeline stages
+    extra_pipeline = [
+        # Example: Add a computed field
+        {
+            "$addFields": {
+                "full_name": {
+                    "$concat": ["$first_name", " ", "$last_name"]
+                }
+            }
+        },
+        # Example: Group and calculate statistics
+        {
+            "$group": {
+                "_id": "$department",
+                "avg_age": {"$avg": "$age"},
+                "count": {"$sum": 1}
+            }
+        }
+    ]
+```
+
+#### Pipeline Stage Order
+
+The custom pipeline stages are added after the basic query and before pagination. The order of operations is:
+
+1. Basic query filtering (including ownership rules)
+2. Custom pipeline stages (extra_pipeline)
+3. Sorting
+4. Pagination
+
+#### Common Use Cases
+
+1. **Computed Fields**
+```python
+extra_pipeline = [
+    {
+        "$addFields": {
+            "age": {
+                "$subtract": [
+                    {"$year": "$$NOW"},
+                    {"$year": "$birth_date"}
+                ]
+            }
+        }
+    }
+]
+```
+
+2. **Data Transformation**
+```python
+extra_pipeline = [
+    {
+        "$project": {
+            "name": 1,
+            "email": 1,
+            "formatted_created_at": {
+                "$dateToString": {
+                    "format": "%Y-%m-%d",
+                    "date": "$created_at"
+                }
+            }
+        }
+    }
+]
+```
+
+3. **Aggregation**
+```python
+extra_pipeline = [
+    {
+        "$group": {
+            "_id": "$category",
+            "total": {"$sum": "$amount"},
+            "count": {"$sum": 1}
+        }
+    }
+]
+```
+
+#### Best Practices
+
+1. **Performance**
+   - Keep pipeline stages efficient
+   - Use indexes that support your pipeline operations
+   - Avoid unnecessary transformations
+
+2. **Maintainability**
+   - Document complex pipeline stages
+   - Break down complex operations into multiple stages
+   - Use meaningful field names
+
+3. **Compatibility**
+   - Ensure pipeline stages work with pagination
+   - Consider the impact on response format
+   - Test with different query parameters
+
+4. **Error Handling**
+   - Handle missing fields gracefully
+   - Use `$ifNull` for default values
+   - Consider edge cases in aggregations
+
+#### Example Implementation
+
+Here's a complete example of a controller using custom pipeline stages:
+
+```python
+class SalesController(ModelController):
+    model = SalesModel
+    schema_create = SalesCreate
+    schema_update = SalesUpdate
+
+    extra_pipeline = [
+        # Add computed fields
+        {
+            "$addFields": {
+                "profit": {
+                    "$subtract": ["$revenue", "$cost"]
+                },
+                "profit_margin": {
+                    "$multiply": [
+                        {
+                            "$divide": [
+                                {"$subtract": ["$revenue", "$cost"]},
+                                "$revenue"
+                            ]
+                        },
+                        100
+                    ]
+                }
+            }
+        },
+        # Add status based on profit margin
+        {
+            "$addFields": {
+                "status": {
+                    "$switch": {
+                        "branches": [
+                            {
+                                "case": {"$gte": ["$profit_margin", 20]},
+                                "then": "excellent"
+                            },
+                            {
+                                "case": {"$gte": ["$profit_margin", 10]},
+                                "then": "good"
+                            }
+                        ],
+                        "default": "needs_attention"
+                    }
+                }
+            }
+        }
+    ]
+```
+
+This will automatically apply these transformations to all list queries, adding computed fields for profit, profit margin, and status based on the profit margin.
+
+## Best Practices
+
+1. Always define your schemas with proper validation
+2. Use type hints for better code completion and error checking
+3. Register controllers at application startup
+4. Use cascade delete carefully as it can have performance implications
+5. Consider using indexes for frequently queried fields
+6. Use soft deletion (deleted flag) for data integrity
+7. Implement proper error handling in your application layer
+8. Document complex pipeline stages when using extra_pipeline
+9. Test aggregation pipelines with different data scenarios
+10. Monitor performance of custom pipeline stages 
