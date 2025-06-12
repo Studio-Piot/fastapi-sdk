@@ -17,6 +17,8 @@ class Settings(BaseSettings):
     TEST_PUBLIC_KEY_PATH: str = os.environ["TEST_PUBLIC_KEY_PATH"]
     AUTH_ISSUER: str = os.environ["AUTH_ISSUER"]
     AUTH_CLIENT_ID: str = os.environ["AUTH_CLIENT_ID"]
+    WEBHOOK_SECRET: str = os.environ["WEBHOOK_SECRET"]
+    WEBHOOK_MAX_AGE_SECONDS: int = 300
 
 
 settings = Settings()

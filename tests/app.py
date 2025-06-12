@@ -6,9 +6,29 @@ from fastapi import FastAPI
 
 from fastapi_sdk.controllers import ModelController
 from fastapi_sdk.middleware.auth import AuthMiddleware
+from fastapi_sdk.webhook.handler import registry
+from fastapi_sdk.webhook.route import create_webhook_router
 from tests.config import settings
 from tests.controllers import Account, Project, Task
 from tests.routes import account_routes, project_routes, task_routes
+
+
+@registry.register("account.created")
+async def handle_account_created(payload: dict):
+    """Handle the account.created event"""
+    account_data = payload.get("data")
+    return {
+        "status": "ok",
+        "result": f"Account created with data {account_data['name']}",
+    }
+
+
+webhook_router = create_webhook_router(
+    webhook_secret=settings.WEBHOOK_SECRET,
+    max_age_seconds=settings.WEBHOOK_MAX_AGE_SECONDS,
+    prefix="/webhook",
+    tags=["Webhook"],
+)
 
 
 @asynccontextmanager
@@ -24,6 +44,7 @@ async def lifespan(_app: FastAPI):
     app.include_router(account_routes.router)
     app.include_router(project_routes.router)
     app.include_router(task_routes.router)
+    app.include_router(webhook_router)
 
     yield
 
