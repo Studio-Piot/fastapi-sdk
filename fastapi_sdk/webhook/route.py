@@ -1,5 +1,6 @@
 """Webhook routes"""
 
+import json
 import logging
 import time
 from typing import Optional
@@ -71,20 +72,6 @@ def create_webhook_router(
                 status_code=HTTP_403_FORBIDDEN, detail="Request expired"
             )
 
-        body = await request.body()
-
-        if not verify_signature(webhook_secret, body, x_signature):
-            logger.warning(
-                "Invalid webhook signature",
-                extra={
-                    "signature": x_signature,
-                    "headers": dict(request.headers),
-                },
-            )
-            raise HTTPException(
-                status_code=HTTP_403_FORBIDDEN, detail="Invalid signature"
-            )
-
         # Parse and process payload
         try:
             payload = await request.json()
@@ -100,6 +87,21 @@ def create_webhook_router(
                 status_code=HTTP_400_BAD_REQUEST,
                 detail=f"Invalid JSON payload: {e}",
             ) from e
+
+        # Convert payload to bytes
+        payload_bytes = json.dumps(payload, separators=(",", ":")).encode()
+
+        if not verify_signature(webhook_secret, payload_bytes, x_signature):
+            logger.warning(
+                "Invalid webhook signature",
+                extra={
+                    "signature": x_signature,
+                    "headers": dict(request.headers),
+                },
+            )
+            raise HTTPException(
+                status_code=HTTP_403_FORBIDDEN, detail="Invalid signature"
+            )
 
         event = payload.get("event")
 

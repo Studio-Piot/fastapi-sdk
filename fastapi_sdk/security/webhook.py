@@ -17,7 +17,6 @@ def generate_signature(secret: str, payload: bytes) -> str:
 
 def verify_signature(secret: str, payload: bytes, signature: str) -> bool:
     """Verify the signature of the payload"""
-
     try:
         # Check signature length (SHA-256 produces 64 hex characters)
         if len(signature) != 64:

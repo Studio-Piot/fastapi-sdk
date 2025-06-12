@@ -23,7 +23,7 @@ def create_webhook_request(
     timestamp: int = None,
 ) -> tuple[dict, dict]:
     """Create a webhook request with proper headers and signature"""
-    if timestamp is None:
+    if not timestamp:
         timestamp = int(time.time())
 
     # Remove spaces in payload
