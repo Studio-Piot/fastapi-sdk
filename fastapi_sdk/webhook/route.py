@@ -1,5 +1,6 @@
 """Webhook routes"""
 
+import logging
 import time
 from typing import Optional
 
@@ -8,6 +9,9 @@ from starlette.status import HTTP_400_BAD_REQUEST, HTTP_403_FORBIDDEN
 
 from fastapi_sdk.security.webhook import verify_signature
 from fastapi_sdk.webhook.handler import registry
+
+# Configure logger
+logger = logging.getLogger(__name__)
 
 
 def create_webhook_router(
@@ -40,12 +44,29 @@ def create_webhook_router(
         try:
             timestamp = int(x_timestamp)
         except ValueError as e:
+            logger.error(
+                "Invalid timestamp format in webhook request",
+                extra={
+                    "timestamp": x_timestamp,
+                    "error": str(e),
+                    "headers": dict(request.headers),
+                },
+            )
             raise HTTPException(
                 status_code=HTTP_400_BAD_REQUEST, detail=f"Invalid timestamp: {e}"
             ) from e
 
         now = int(time.time())
         if abs(now - timestamp) > max_age_seconds:
+            logger.warning(
+                "Webhook request expired",
+                extra={
+                    "timestamp": timestamp,
+                    "now": now,
+                    "max_age": max_age_seconds,
+                    "headers": dict(request.headers),
+                },
+            )
             raise HTTPException(
                 status_code=HTTP_403_FORBIDDEN, detail="Request expired"
             )
@@ -53,22 +74,67 @@ def create_webhook_router(
         body = await request.body()
 
         if not verify_signature(webhook_secret, body, x_signature):
+            logger.warning(
+                "Invalid webhook signature",
+                extra={
+                    "signature": x_signature,
+                    "headers": dict(request.headers),
+                },
+            )
             raise HTTPException(
                 status_code=HTTP_403_FORBIDDEN, detail="Invalid signature"
             )
 
         # Parse and process payload
-        payload = await request.json()
+        try:
+            payload = await request.json()
+        except Exception as e:
+            logger.error(
+                "Failed to parse webhook payload",
+                extra={
+                    "error": str(e),
+                    "headers": dict(request.headers),
+                },
+            )
+            raise HTTPException(
+                status_code=HTTP_400_BAD_REQUEST,
+                detail=f"Invalid JSON payload: {e}",
+            ) from e
+
         event = payload.get("event")
 
         if not event:
+            logger.warning(
+                "Missing event in webhook payload",
+                extra={
+                    "payload": payload,
+                    "headers": dict(request.headers),
+                },
+            )
             raise HTTPException(
                 status_code=HTTP_400_BAD_REQUEST, detail="Missing event in payload"
             )
 
         try:
-            return await registry.handle_event(event, payload)
+            result = await registry.handle_event(event, payload)
+            logger.info(
+                "Webhook event processed successfully",
+                extra={
+                    "event": event,
+                    "payload": payload,
+                },
+            )
+            return result
         except ValueError as e:
+            logger.error(
+                "Failed to process webhook event",
+                extra={
+                    "event": event,
+                    "payload": payload,
+                    "error": str(e),
+                    "headers": dict(request.headers),
+                },
+            )
             raise HTTPException(status_code=HTTP_400_BAD_REQUEST, detail=str(e)) from e
 
     return router
