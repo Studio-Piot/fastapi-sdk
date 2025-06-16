@@ -412,7 +412,6 @@ class TestProjectRoutes:
 
         # Find project 11 in the response
         project_11_data = next(p for p in data["items"] if p["uuid"] == project_11.uuid)
-        print(project_11_data)
         assert "latest_task" in project_11_data
         assert (
             project_11_data["latest_task"]["uuid"] == task_113.uuid

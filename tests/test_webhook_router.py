@@ -49,7 +49,6 @@ async def test_webhook_success(client):
     data, headers = create_webhook_request(payload)
 
     response = client.post("/webhook", json=data, headers=headers)
-    print(response.json())
     assert response.status_code == 200
     assert response.json() == {
         "status": "ok",

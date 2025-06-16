@@ -331,8 +331,6 @@ class RouteController:
                 else:
                     query_list.append({field: value})
 
-            print(query_list)
-
             instances = await self.controller(db).list(
                 page=page,
                 query=query_list,
