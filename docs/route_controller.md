@@ -179,7 +179,7 @@ You can include related objects in both list and get endpoints using the `includ
 # List accounts with their projects included
 GET /accounts/?include=projects
 
-# List projecta with multiple relations included
+# List projects with multiple relations included
 GET /projects/?include=projects&include=account
 
 # Get a specific account with its projects included

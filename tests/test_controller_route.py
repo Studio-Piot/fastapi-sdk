@@ -1,6 +1,6 @@
 """Tests for the RouteController."""
 
-from datetime import timedelta
+from datetime import UTC, datetime, timedelta
 
 import pytest
 from motor.core import AgnosticDatabase
@@ -9,7 +9,6 @@ from fastapi_sdk.utils.test import create_access_token
 from tests.config import settings
 from tests.constants import ProjectStatusOptions
 from tests.controllers import Account, Project, Task
-from tests.routes import project_routes
 
 
 async def fixtures(db_engine: AgnosticDatabase, account: Account):
@@ -1241,3 +1240,82 @@ class TestPermissions:
             "Invalid query field: due_date. Allowed fields: ['account_id', 'project_id', 'status']"
             in response.json()["detail"]
         )
+
+
+@pytest.mark.asyncio
+class TestDateRangeFiltering:
+    """Test date range filtering functionality."""
+
+    async def test_date_range_filtering(self, client, auth_headers, db_engine, account):
+        """Test filtering with date ranges."""
+
+        # Create test projects with different dates
+        now = datetime.now(UTC)
+        yesterday = now - timedelta(days=1)
+        tomorrow = now + timedelta(days=1)
+        next_week = now + timedelta(days=7)
+
+        # Create projects with different dates
+        await Project(db_engine).create(
+            {
+                "name": "Project Past",
+                "account_id": account.uuid,
+                "created_at": yesterday,
+            },
+            claims={"roles": ["superuser"]},
+        )
+        await Project(db_engine).create(
+            {
+                "name": "Project Present",
+                "account_id": account.uuid,
+                "created_at": now,
+            },
+            claims={"roles": ["superuser"]},
+        )
+        await Project(db_engine).create(
+            {
+                "name": "Project Future",
+                "account_id": account.uuid,
+                "created_at": tomorrow,
+            },
+            claims={"roles": ["superuser"]},
+        )
+
+        # Test date range that includes all projects
+        response = client.get(
+            f"/projects/?created_at={yesterday.strftime('%Y-%m-%d')}..{next_week.strftime('%Y-%m-%d')}",
+            headers=auth_headers,
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data["items"]) == 3
+
+        # Test date range that includes only past and present
+        response = client.get(
+            f"/projects/?created_at={yesterday.strftime('%Y-%m-%d')}..{now.strftime('%Y-%m-%d')}",
+            headers=auth_headers,
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data["items"]) == 2
+        assert any(p["name"] == "Project Past" for p in data["items"])
+        assert any(p["name"] == "Project Present" for p in data["items"])
+
+        # Test date range that includes only future
+        response = client.get(
+            f"/projects/?created_at={tomorrow.strftime('%Y-%m-%d')}..{next_week.strftime('%Y-%m-%d')}",
+            headers=auth_headers,
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data["items"]) == 1
+        assert data["items"][0]["name"] == "Project Future"
+
+        # Test invalid date format
+        response = client.get(
+            "/projects/?created_at=invalid-date..2025-01-01",
+            headers=auth_headers,
+        )
+        assert response.status_code == 200  # Should still work but return no results
+        data = response.json()
+        assert len(data["items"]) == 0

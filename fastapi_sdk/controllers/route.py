@@ -4,6 +4,7 @@ This module provides a base class for generating authenticated CRUD routes
 with database and user dependencies.
 """
 
+from datetime import datetime
 from typing import Any, Callable, List, Optional, Type
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
@@ -258,7 +259,34 @@ class RouteController:
                     # Handle range queries (e.g., created_at=2023-01-01..2023-12-31)
                     if ".." in value:
                         start, end = value.split("..")
-                        query_list.append({field: {"$gte": start, "$lte": end}})
+                        # Try to parse dates if they match ISO format
+                        try:
+                            # Check if the dates include time component
+                            has_time = "T" in start or "T" in end
+
+                            # Parse the dates
+                            start_date = datetime.fromisoformat(
+                                start.replace("Z", "+00:00")
+                            )
+                            end_date = datetime.fromisoformat(
+                                end.replace("Z", "+00:00")
+                            )
+
+                            # If no time component was provided, adjust to start/end of day
+                            if not has_time:
+                                start_date = start_date.replace(
+                                    hour=0, minute=0, second=0, microsecond=0
+                                )
+                                end_date = end_date.replace(
+                                    hour=23, minute=59, second=59, microsecond=999999
+                                )
+
+                            query_list.append(
+                                {field: {"$gte": start_date, "$lte": end_date}}
+                            )
+                        except ValueError:
+                            # If not dates, use the original string values
+                            query_list.append({field: {"$gte": start, "$lte": end}})
                     # Handle list values (e.g., status=active,pending)
                     elif "," in value:
                         values = value.split(",")
@@ -302,6 +330,8 @@ class RouteController:
                         query_list.append({field: value})
                 else:
                     query_list.append({field: value})
+
+            print(query_list)
 
             instances = await self.controller(db).list(
                 page=page,
