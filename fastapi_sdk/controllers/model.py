@@ -116,14 +116,10 @@ class ModelController:
                         ]
         return data_dict
 
-    async def create(
-        self, data: dict, claims: Optional[Dict[str, Any]] = None
-    ) -> BaseModel:
-        """Create a new model."""
-        data = self.schema_create(**data)
-        data_dict = data.model_dump()
-
-        # Verify ownership if rule exists
+    def _verify_ownership(
+        self, data_dict: dict, claims: Optional[Dict[str, Any]] = None
+    ) -> None:
+        """Verify ownership of the data dictionary."""
         if self.ownership_rule:
             if (
                 not self.ownership_rule.allow_public
@@ -146,6 +142,16 @@ class ModelController:
                             status_code=403,
                             detail=f"Invalid {self.ownership_rule.model_field}",
                         )
+
+    async def create(
+        self, data: dict, claims: Optional[Dict[str, Any]] = None
+    ) -> BaseModel:
+        """Create a new model."""
+        data = self.schema_create(**data)
+        data_dict = data.model_dump()
+
+        # Verify ownership if rule exists
+        self._verify_ownership(data_dict, claims)
 
         # Convert lists of embedded models
         data_dict = self._convert_embedded_model_lists(data_dict)
