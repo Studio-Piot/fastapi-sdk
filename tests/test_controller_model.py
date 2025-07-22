@@ -788,7 +788,9 @@ class TestControllerHooks:
                 data_dict["created_by"] = claims["user_id"]
             return data_dict
 
-        async def after_create(self, obj: Model) -> Model:
+        async def after_create(
+            self, obj: Model, claims: Optional[dict] = None
+        ) -> Model:
             """Add after creation send notification."""
             await self.notify(
                 event_type="account_created", account_id=obj.uuid, account_name=obj.name
@@ -803,7 +805,9 @@ class TestControllerHooks:
                 data_dict["updated_by"] = claims["user_id"]
             return data_dict
 
-        async def after_update(self, obj: Model) -> Model:
+        async def after_update(
+            self, obj: Model, claims: Optional[dict] = None
+        ) -> Model:
             """Add after update send notification."""
             await self.notify(
                 event_type="account_updated", account_id=obj.uuid, account_name=obj.name

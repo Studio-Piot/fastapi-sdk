@@ -320,7 +320,7 @@ class RoleController(ModelController):
     schema_create = RoleCreate
     schema_update = RoleUpdate
 
-    async def after_create(self, obj: RoleModel) -> RoleModel:
+    async def after_create(self, obj: RoleModel, claims: Optional[dict] = None) -> RoleModel:
         """After create hook to compute permission names."""
         obj.permission_names = [
             await self.db_engine.find_one(
@@ -346,7 +346,7 @@ class RoleController(ModelController):
     schema_create = RoleCreate
     schema_update = RoleUpdate
 
-    async def after_update(self, obj: RoleModel) -> RoleModel:
+    async def after_update(self, obj: RoleModel, claims: Optional[dict] = None) -> RoleModel:
         """After update hook to recompute permission names."""
         obj.permission_names = [
             await self.db_engine.find_one(
@@ -789,20 +789,22 @@ Lists models related to another model by foreign key.
 
 ### Hook Methods
 
-#### `after_create(obj: BaseModel) -> BaseModel`
+#### `after_create(obj: BaseModel, claims: Optional[dict] = None) -> BaseModel`
 Hook called after creating a model.
 
 **Parameters:**
 - `obj`: The created model instance
+- `claims`: Optional user claims for ownership verification
 
 **Returns:**
 - The modified model instance
 
-#### `after_update(obj: BaseModel) -> BaseModel`
+#### `after_update(obj: BaseModel, claims: Optional[dict] = None) -> BaseModel`
 Hook called after updating a model.
 
 **Parameters:**
 - `obj`: The updated model instance
+- `claims`: Optional user claims for ownership verification
 
 **Returns:**
 - The modified model instance

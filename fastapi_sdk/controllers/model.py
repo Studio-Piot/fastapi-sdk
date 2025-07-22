@@ -165,7 +165,7 @@ class ModelController:
 
         # Call after_create hook if implemented
         if hasattr(self, "after_create"):
-            model = await self.after_create(model)
+            model = await self.after_create(model, claims)
 
         return model
 
@@ -195,11 +195,13 @@ class ModelController:
 
         # Call after_update hook if implemented
         if hasattr(self, "after_update"):
-            model = await self.after_update(model)
+            model = await self.after_update(model, claims)
 
         return model
 
-    async def after_create(self, obj: BaseModel) -> BaseModel:
+    async def after_create(
+        self, obj: BaseModel, claims: Optional[Dict[str, Any]] = None
+    ) -> BaseModel:
         """Hook called after creating a model.
 
         Override this method in your controller to add custom behavior after creation.
@@ -207,13 +209,16 @@ class ModelController:
 
         Args:
             obj: The created model instance
+            claims: Optional claims from the JWT token
 
         Returns:
             The modified model instance
         """
         return obj
 
-    async def after_update(self, obj: BaseModel) -> BaseModel:
+    async def after_update(
+        self, obj: BaseModel, claims: Optional[Dict[str, Any]] = None
+    ) -> BaseModel:
         """Hook called after updating a model.
 
         Override this method in your controller to add custom behavior after update.
@@ -221,6 +226,7 @@ class ModelController:
 
         Args:
             obj: The updated model instance
+            claims: Optional claims from the JWT token
 
         Returns:
             The modified model instance
