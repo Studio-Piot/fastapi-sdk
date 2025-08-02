@@ -272,6 +272,7 @@ class ModelController:
         uuid: str,
         claims: Optional[Dict[str, Any]] = None,
         include_deleted: bool = False,
+        include: Optional[List[str]] = None,
     ) -> Optional[BaseModel]:
         """Get a model.
 
@@ -279,6 +280,7 @@ class ModelController:
             uuid: The UUID of the model to get
             claims: Optional claims for ownership verification
             include_deleted: Whether to include deleted items in the query
+            include: Optional list of related objects to include
         """
         query = self.model.uuid == uuid
         if not include_deleted:
@@ -299,7 +301,38 @@ class ModelController:
                         == ownership_filter[self.ownership_rule.model_field]
                     )
 
-        return await self.db_engine.find_one(self.model, query)
+        model = await self.db_engine.find_one(self.model, query)
+
+        # If model is found and include is specified, load relationships
+        if model and include:
+            for relation in include:
+                if relation not in self.relationships:
+                    continue
+
+                rel_info = self.relationships[relation]
+                rel_controller_name = rel_info["controller"]
+                rel_type = rel_info["type"]
+                foreign_key = rel_info.get("foreign_key")
+
+                # Get the controller class from the registry
+                rel_controller_class = self.get_controller(rel_controller_name)
+
+                if rel_type == "one_to_many":
+                    # Fetch related items where foreign_key matches this model's uuid
+                    related_items = await rel_controller_class(
+                        self.db_engine
+                    ).list_related(
+                        foreign_key=foreign_key, value=model.uuid, claims=claims
+                    )
+                    setattr(model, relation, related_items)
+                elif rel_type == "many_to_one":
+                    # Fetch single related item
+                    related_item = await rel_controller_class(self.db_engine).get(
+                        uuid=getattr(model, foreign_key), claims=claims
+                    )
+                    setattr(model, relation, related_item)
+
+        return model
 
     async def delete(
         self, uuid: str, claims: Optional[Dict[str, Any]] = None

@@ -765,6 +765,96 @@ async def test_task_with_assignees(db_engine: AgnosticDatabase):
 
 
 @pytest.mark.asyncio
+async def test_get_with_include(db_engine: AgnosticDatabase):
+    """Test getting a model with included relationships."""
+    # Create test data
+    account = await Account(db_engine).create({"name": "Test Account"})
+    account_claims = {"account_id": account.uuid}
+
+    # Create projects for this account
+    project_1 = await Project(db_engine).create(
+        {"name": "Project 1", "account_id": account.uuid},
+        claims=account_claims,
+    )
+    project_2 = await Project(db_engine).create(
+        {"name": "Project 2", "account_id": account.uuid},
+        claims=account_claims,
+    )
+
+    # Create tasks for the first project
+    task_1 = await Task(db_engine).create(
+        {
+            "name": "Task 1",
+            "description": "First task",
+            "account_id": account.uuid,
+            "project_id": project_1.uuid,
+        },
+        claims=account_claims,
+    )
+    task_2 = await Task(db_engine).create(
+        {
+            "name": "Task 2",
+            "description": "Second task",
+            "account_id": account.uuid,
+            "project_id": project_1.uuid,
+        },
+        claims=account_claims,
+    )
+
+    # Test getting account with projects (one-to-many)
+    account_with_projects = await Account(db_engine).get(
+        uuid=account.uuid, include=["projects"], claims=account_claims
+    )
+    assert account_with_projects is not None
+    assert hasattr(account_with_projects, "projects")
+    assert len(account_with_projects.projects) == 2
+    project_uuids = [p.uuid for p in account_with_projects.projects]
+    assert project_1.uuid in project_uuids
+    assert project_2.uuid in project_uuids
+
+    # Test getting project with account (many-to-one) and tasks (one-to-many)
+    project_with_relations = await Project(db_engine).get(
+        uuid=project_1.uuid, include=["account", "tasks"], claims=account_claims
+    )
+    assert project_with_relations is not None
+    assert hasattr(project_with_relations, "account")
+    assert hasattr(project_with_relations, "tasks")
+
+    # Verify many-to-one relationship (account)
+    assert project_with_relations.account.uuid == account.uuid
+    assert project_with_relations.account.name == "Test Account"
+
+    # Verify one-to-many relationship (tasks)
+    assert len(project_with_relations.tasks) == 2
+    task_uuids = [t.uuid for t in project_with_relations.tasks]
+    assert task_1.uuid in task_uuids
+    assert task_2.uuid in task_uuids
+
+    # Test getting task with project (many-to-one)
+    task_with_project = await Task(db_engine).get(
+        uuid=task_1.uuid, include=["project"], claims=account_claims
+    )
+    assert task_with_project is not None
+    assert hasattr(task_with_project, "project")
+    assert task_with_project.project.uuid == project_1.uuid
+    assert task_with_project.project.name == "Project 1"
+
+    # Test getting with non-existent relationship
+    account_with_invalid = await Account(db_engine).get(
+        uuid=account.uuid, include=["non_existent_relation"], claims=account_claims
+    )
+    assert account_with_invalid is not None
+    assert not hasattr(account_with_invalid, "non_existent_relation")
+
+    # Test getting without include parameter (should work normally)
+    account_normal = await Account(db_engine).get(
+        uuid=account.uuid, claims=account_claims
+    )
+    assert account_normal is not None
+    assert account_normal.projects is None
+
+
+@pytest.mark.asyncio
 class TestControllerHooks:
     """Test controller hooks functionality."""
 
