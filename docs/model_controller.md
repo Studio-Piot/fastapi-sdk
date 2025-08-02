@@ -95,6 +95,18 @@ user = await User(db_engine).create({"name": "John", "email": "john@example.com"
 # Get single user
 user = await User(db_engine).get(uuid="user_123")
 
+# Get user with related projects included
+user = await User(db_engine).get(
+    uuid="user_123",
+    include=["projects"]
+)
+
+# Get user with multiple relations included
+user = await User(db_engine).get(
+    uuid="user_123",
+    include=["projects", "tasks"]
+)
+
 # List users with pagination
 users = await User(db_engine).list(page=1, order_by={"created_at": -1})
 ```
@@ -121,6 +133,12 @@ user = await User(db_engine).undelete(uuid="user_123")
 ```python
 # Get user with related projects
 user = await User(db_engine).get_with_relations(
+    uuid="user_123",
+    include=["projects"]
+)
+
+# Get with include parameter (alternative to get_with_relations)
+user = await User(db_engine).get(
     uuid="user_123",
     include=["projects"]
 )
@@ -176,7 +194,43 @@ user = await User(db_engine).get_with_relations(
     uuid="user_123",
     include=["projects", "tasks"]  # Include both projects and tasks
 )
+
+# Alternative: Use get method with include parameter
+user = await User(db_engine).get(
+    uuid="user_123",
+    include=["projects", "tasks"]  # Include both projects and tasks
+)
 ```
+
+### Get Single Object with Relations
+
+The `get` method now supports the `include` parameter to load related objects:
+
+```python
+# Get a user with their projects included
+user = await User(db_engine).get(
+    uuid="user_123",
+    include=["projects"]
+)
+
+# Get a project with its account and tasks
+project = await Project(db_engine).get(
+    uuid="project_123",
+    include=["account", "tasks"]
+)
+
+# Get a task with its project
+task = await Task(db_engine).get(
+    uuid="task_123",
+    include=["project"]
+)
+```
+
+**Benefits of using `get` with `include`:**
+- More efficient than `get_with_relations` for single objects
+- Consistent interface with the `list` method
+- Supports both one-to-many and many-to-one relationships
+- Gracefully handles non-existent relationships
 
 ### Response Format with Relations
 
@@ -227,6 +281,18 @@ When using the `include` parameter, the response will include the related object
             "owner_id": "user_123"
         }
     ]
+}
+
+# Example response for get with many-to-one relationship
+{
+    "uuid": "project_1",
+    "name": "Project 1",
+    "owner_id": "user_123",
+    "account": {  # Included account (many-to-one)
+        "uuid": "acc_123",
+        "name": "Test Account",
+        "email": "account@example.com"
+    }
 }
 ```
 
@@ -699,16 +765,35 @@ active_count = await controller.count(
 )
 ```
 
-#### `get(uuid: str, claims: Optional[Dict[str, Any]] = None, include_deleted: bool = False) -> Optional[BaseModel]`
+#### `get(uuid: str, claims: Optional[Dict[str, Any]] = None, include_deleted: bool = False, include: Optional[List[str]] = None) -> Optional[BaseModel]`
 Retrieves a single model by UUID.
 
 **Parameters:**
 - `uuid`: The UUID of the model to retrieve
 - `claims`: Optional user claims for ownership verification
 - `include_deleted`: Whether to include deleted models
+- `include`: Optional list of relationship names to include
 
 **Returns:**
 - The model instance or None if not found
+
+**Example:**
+```python
+# Get a user without relations
+user = await controller.get(uuid="user_123")
+
+# Get a user with projects included
+user = await controller.get(
+    uuid="user_123",
+    include=["projects"]
+)
+
+# Get a user with multiple relations
+user = await controller.get(
+    uuid="user_123",
+    include=["projects", "tasks", "account"]
+)
+```
 
 #### `update(uuid: str, data: dict, claims: Optional[Dict[str, Any]] = None) -> Optional[BaseModel]`
 Updates an existing model.
