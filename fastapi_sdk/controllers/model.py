@@ -550,7 +550,11 @@ class ModelController:
         claims: Optional[Dict[str, Any]] = None,
     ) -> BaseModel:
         """Get a model with its relationships."""
-        model = await self.get(uuid, claims)
+        # Add deprecation warning
+        print(
+            "get_with_relations is deprecated. Use get with include parameter instead."
+        )
+        model = await self.get(uuid, claims, include=include)
         if not model or not include:
             return model
 
