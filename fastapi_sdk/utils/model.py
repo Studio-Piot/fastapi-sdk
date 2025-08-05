@@ -32,7 +32,7 @@ def convert_model_name(name: str) -> str:
     """Convert a model name from CamelCase to snake_case and remove 'model' suffix.
 
     Args:
-        model_name: The model name to convert
+        name: The model name to convert
 
     Returns:
         The converted model name in snake_case without 'model' suffix
