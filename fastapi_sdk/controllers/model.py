@@ -458,12 +458,12 @@ class ModelController:
                     )
                     _pipeline.append({"$unwind": f"${relation}"})
 
-        # Add custom pipeline stages if defined in the controller
+        # Add custom pipeline stages if defined in the controller (first)
         if self.extra_pipeline:
             _pipeline.extend(self.extra_pipeline)
 
-        # Sorting, default by created_at
-        _sort = order_by if order_by else {"created_at": -1}
+        # Sorting, default by created_at and _id for stable ordering
+        _sort = order_by if order_by else {"created_at": -1, "_id": -1}
 
         # Add the pipeline stages
         _pipeline.append({"$match": _query})
@@ -485,7 +485,7 @@ class ModelController:
             # Create a count pipeline that applies the same transformations but without pagination
             count_pipeline = []
 
-            # Add custom pipeline stages if defined in the controller
+            # Add custom pipeline stages if defined in the controller (first)
             if self.extra_pipeline:
                 count_pipeline.extend(self.extra_pipeline)
 

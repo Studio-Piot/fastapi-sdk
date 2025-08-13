@@ -870,6 +870,17 @@ async def test_one_based_pagination(db_engine: AgnosticDatabase):
         )
         projects.append(project)
 
+    # Add task for each project
+    for project in projects:
+        await Task(db_engine).create(
+            {
+                "name": f"Task {project.name}",
+                "project_id": project.uuid,
+                "account_id": account.uuid,
+            },
+            claims=account_claims,
+        )
+
     # Test that page 0 raises an error
     with pytest.raises(ValueError, match="Page number must be 1 or greater"):
         await Project(db_engine).list(page=0, claims=account_claims)
@@ -882,7 +893,6 @@ async def test_one_based_pagination(db_engine: AgnosticDatabase):
     result_page_1 = await Project(db_engine).list(
         page=1, n_per_page=2, claims=account_claims
     )
-    print([p.uuid for p in result_page_1["items"]])
 
     assert result_page_1["total"] == 5
     assert len(result_page_1["items"]) == 2
@@ -894,7 +904,6 @@ async def test_one_based_pagination(db_engine: AgnosticDatabase):
     result_page_2 = await Project(db_engine).list(
         page=2, n_per_page=2, claims=account_claims
     )
-    print([p.uuid for p in result_page_2["items"]])
 
     assert result_page_2["total"] == 5
     assert len(result_page_2["items"]) == 2
@@ -906,7 +915,6 @@ async def test_one_based_pagination(db_engine: AgnosticDatabase):
     result_page_3 = await Project(db_engine).list(
         page=3, n_per_page=2, claims=account_claims
     )
-    print([p.uuid for p in result_page_3["items"]])
 
     assert result_page_3["total"] == 5
     assert len(result_page_3["items"]) == 1
@@ -918,11 +926,9 @@ async def test_one_based_pagination(db_engine: AgnosticDatabase):
     all_project_uuids = set()
     for result in [result_page_1, result_page_2, result_page_3]:
         for project in result["items"]:
-            all_project_uuids.add(project.uuid)
+            all_project_uuids.add(project.name)
 
-    expected_uuids = {project.uuid for project in projects}
-    print(sorted(all_project_uuids))
-    print(sorted(expected_uuids))
+    expected_uuids = {project.name for project in projects}
     assert all_project_uuids == expected_uuids
 
     # Test default page (should be 1)
