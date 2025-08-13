@@ -166,7 +166,7 @@ class RouteController:
         @require_permission(f"{self.model_name}:read")
         async def list_route(
             request: Request,
-            page: int = Query(default=0, ge=0, description="Page number (0-based)"),
+            page: int = Query(default=1, ge=0, description="Page number (1-based)"),
             order_by: str = Query(default=None, description="Field to order by"),
             order_direction: str = Query(
                 default="asc",
@@ -197,7 +197,7 @@ class RouteController:
 
             Example:
                 # List accounts with pagination
-                GET /accounts/?page=0
+                GET /accounts/?page=1
 
                 # List accounts with ordering
                 GET /accounts/?order_by=created_at&order_direction=desc
@@ -212,7 +212,7 @@ class RouteController:
                 GET /accounts/?n_per_page=50
 
                 # Combine multiple parameters
-                GET /accounts/?page=0&order_by=created_at&order_direction=desc&include=projects&name=Test Account&n_per_page=50
+                GET /accounts/?page=1&order_by=created_at&order_direction=desc&include=projects&name=Test Account&n_per_page=50
             """
             # Get all query parameters
             query_params = dict(request.query_params)

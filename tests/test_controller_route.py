@@ -531,7 +531,7 @@ class TestTaskRoutes:
         data = response.json()
         assert len(data["items"]) == 25  # Default page size
         assert data["total"] == 30
-        assert data["page"] == 0
+        assert data["page"] == 1
         assert data["pages"] == 2  # 30 items / 25 per page = 2 pages
 
         # Test custom n_per_page (10)
@@ -540,7 +540,7 @@ class TestTaskRoutes:
         data = response.json()
         assert len(data["items"]) == 10
         assert data["total"] == 30
-        assert data["page"] == 0
+        assert data["page"] == 1
         assert data["pages"] == 3  # 30 items / 10 per page = 3 pages
 
         # Test n_per_page exceeding max limit (300)

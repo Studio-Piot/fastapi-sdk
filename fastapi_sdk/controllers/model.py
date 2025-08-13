@@ -364,7 +364,7 @@ class ModelController:
 
     async def list(
         self,
-        page: int = 0,
+        page: int = 1,
         query: Optional[List[dict]] = None,
         order_by: Optional[dict] = None,
         claims: Optional[Dict[str, Any]] = None,
@@ -375,7 +375,7 @@ class ModelController:
         """List models.
 
         Args:
-            page: The page number (0-based)
+            page: The page number (1-based, minimum 1)
             query: Optional query filters
             order_by: Optional sorting criteria
             claims: Optional claims for ownership verification
@@ -383,6 +383,10 @@ class ModelController:
             n_per_page: Optional number of items per page (max 250)
             deleted: If True, only return deleted items. If False, only return non-deleted items.
         """
+        # Validate page number
+        if page < 1:
+            raise ValueError("Page number must be 1 or greater")
+
         # Get the collection
         collection_name = (
             self.model.model_config.get("collection") or self.model.__collection__
@@ -468,15 +472,35 @@ class ModelController:
         # Determine items per page
         items_per_page = min(n_per_page or self.n_per_page, 250)
 
-        # Add pagination data
-        _pipeline.append({"$skip": (page - 1) * items_per_page if page > 0 else 0})
+        # Add pagination data (1-based pagination)
+        _pipeline.append({"$skip": (page - 1) * items_per_page})
         _pipeline.append({"$limit": items_per_page})
 
         # Execute the aggregation
         items = await _collection.aggregate(_pipeline).to_list(length=items_per_page)
 
         # Count the total number of items
-        total = await _collection.count_documents(_query)
+        # If we have extra_pipeline or include relationships, we need to use aggregation for accurate count
+        if self.extra_pipeline or include:
+            # Create a count pipeline that applies the same transformations but without pagination
+            count_pipeline = []
+
+            # Add custom pipeline stages if defined in the controller
+            if self.extra_pipeline:
+                count_pipeline.extend(self.extra_pipeline)
+
+            # Add the match stage
+            count_pipeline.append({"$match": _query})
+
+            # Add count stage
+            count_pipeline.append({"$count": "total"})
+
+            # Execute the count aggregation
+            count_result = await _collection.aggregate(count_pipeline).to_list(1)
+            total = count_result[0]["total"] if count_result else 0
+        else:
+            # Use simple count for basic queries
+            total = await _collection.count_documents(_query)
 
         pages = total // items_per_page
         if total % items_per_page > 0:

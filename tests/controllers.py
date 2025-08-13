@@ -96,12 +96,6 @@ class Project(ModelController):
                 "tasks_for_project": 0  # Remove the tasks array since we only need latest_task
             }
         },
-        # {
-        #     "$project": {
-        #         "latest_task": 1,
-        #         "tasks_for_project": 1,
-        #     }
-        # },
     ]
 
 

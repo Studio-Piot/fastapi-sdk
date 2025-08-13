@@ -68,7 +68,7 @@ async def test_model_controller(db_engine: AgnosticDatabase):
     accounts = await Account(db_engine).list(claims={"account_id": account_1.uuid})
     assert len(accounts["items"]) == 1
     assert accounts["total"] == 1
-    assert accounts["page"] == 0
+    assert accounts["page"] == 1
     assert accounts["pages"] == 1
 
     # Test n_per_page functionality
@@ -76,7 +76,7 @@ async def test_model_controller(db_engine: AgnosticDatabase):
     accounts = await Account(db_engine).list(claims={"account_id": account_1.uuid})
     assert len(accounts["items"]) == 1
     assert accounts["total"] == 1
-    assert accounts["page"] == 0
+    assert accounts["page"] == 1
     assert accounts["pages"] == 1
 
     # Test custom n_per_page
@@ -85,7 +85,7 @@ async def test_model_controller(db_engine: AgnosticDatabase):
     )
     assert len(accounts["items"]) == 1
     assert accounts["total"] == 1
-    assert accounts["page"] == 0
+    assert accounts["page"] == 1
     assert accounts["pages"] == 1
 
     # Test n_per_page exceeding max limit (250)
@@ -94,7 +94,7 @@ async def test_model_controller(db_engine: AgnosticDatabase):
     )
     assert len(accounts["items"]) == 1
     assert accounts["total"] == 1
-    assert accounts["page"] == 0
+    assert accounts["page"] == 1
     assert accounts["pages"] == 1
 
     # Delete account
@@ -124,7 +124,7 @@ async def test_model_controller(db_engine: AgnosticDatabase):
     assert deleted_accounts["items"][0].uuid == account_1.uuid
     assert deleted_accounts["items"][0].deleted is True
     assert deleted_accounts["total"] == 1
-    assert deleted_accounts["page"] == 0
+    assert deleted_accounts["page"] == 1
     assert deleted_accounts["pages"] == 1
 
     # Update deleted account
@@ -140,7 +140,7 @@ async def test_model_controller(db_engine: AgnosticDatabase):
     assert len(accounts["items"]) == 1
     assert accounts["items"][0].uuid == account_2.uuid
     assert accounts["total"] == 1
-    assert accounts["page"] == 0
+    assert accounts["page"] == 1
     assert accounts["pages"] == 1
 
     # Test count method
@@ -229,7 +229,7 @@ async def test_list_options(db_engine: AgnosticDatabase):
     )
     assert len(accounts["items"]) == 2
     assert accounts["total"] == 2
-    assert accounts["page"] == 0
+    assert accounts["page"] == 1
     assert accounts["pages"] == 1
 
     # List with page 2 (Page 1 is the same as default, page 0)
@@ -249,7 +249,7 @@ async def test_list_options(db_engine: AgnosticDatabase):
     assert len(accounts["items"]) == 1
     assert accounts["items"][0].uuid == account_1.uuid
     assert accounts["total"] == 1
-    assert accounts["page"] == 0
+    assert accounts["page"] == 1
     assert accounts["pages"] == 1
 
     # List with order_by
@@ -261,7 +261,7 @@ async def test_list_options(db_engine: AgnosticDatabase):
     assert accounts["items"][0].uuid == account_2.uuid
     assert accounts["items"][1].uuid == account_1.uuid
     assert accounts["total"] == 2
-    assert accounts["page"] == 0
+    assert accounts["page"] == 1
     assert accounts["pages"] == 1
 
 
@@ -852,6 +852,82 @@ async def test_get_with_include(db_engine: AgnosticDatabase):
     )
     assert account_normal is not None
     assert account_normal.projects is None
+
+
+@pytest.mark.asyncio
+async def test_one_based_pagination(db_engine: AgnosticDatabase):
+    """Test that pagination uses 1-based indexing."""
+    # Create an account
+    account = await Account(db_engine).create({"name": "Test Account"})
+    account_claims = {"account_id": account.uuid}
+
+    # Create multiple projects for this account
+    projects = []
+    for i in range(5):
+        project = await Project(db_engine).create(
+            {"name": f"Project {i}", "account_id": account.uuid},
+            claims=account_claims,
+        )
+        projects.append(project)
+
+    # Test that page 0 raises an error
+    with pytest.raises(ValueError, match="Page number must be 1 or greater"):
+        await Project(db_engine).list(page=0, claims=account_claims)
+
+    # Test that page -1 raises an error
+    with pytest.raises(ValueError, match="Page number must be 1 or greater"):
+        await Project(db_engine).list(page=-1, claims=account_claims)
+
+    # Test first page (page 1)
+    result_page_1 = await Project(db_engine).list(
+        page=1, n_per_page=2, claims=account_claims
+    )
+    print([p.uuid for p in result_page_1["items"]])
+
+    assert result_page_1["total"] == 5
+    assert len(result_page_1["items"]) == 2
+    assert result_page_1["page"] == 1
+    assert result_page_1["pages"] == 3  # 5 items / 2 per page = 3 pages
+    assert result_page_1["size"] == 2
+
+    # Test second page (page 2)
+    result_page_2 = await Project(db_engine).list(
+        page=2, n_per_page=2, claims=account_claims
+    )
+    print([p.uuid for p in result_page_2["items"]])
+
+    assert result_page_2["total"] == 5
+    assert len(result_page_2["items"]) == 2
+    assert result_page_2["page"] == 2
+    assert result_page_2["pages"] == 3
+    assert result_page_2["size"] == 2
+
+    # Test third page (page 3) - should have 1 item
+    result_page_3 = await Project(db_engine).list(
+        page=3, n_per_page=2, claims=account_claims
+    )
+    print([p.uuid for p in result_page_3["items"]])
+
+    assert result_page_3["total"] == 5
+    assert len(result_page_3["items"]) == 1
+    assert result_page_3["page"] == 3
+    assert result_page_3["pages"] == 3
+    assert result_page_3["size"] == 1
+
+    # Verify that all projects are returned across all pages
+    all_project_uuids = set()
+    for result in [result_page_1, result_page_2, result_page_3]:
+        for project in result["items"]:
+            all_project_uuids.add(project.uuid)
+
+    expected_uuids = {project.uuid for project in projects}
+    print(sorted(all_project_uuids))
+    print(sorted(expected_uuids))
+    assert all_project_uuids == expected_uuids
+
+    # Test default page (should be 1)
+    result_default = await Project(db_engine).list(claims=account_claims)
+    assert result_default["page"] == 1
 
 
 @pytest.mark.asyncio

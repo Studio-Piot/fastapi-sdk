@@ -553,7 +553,7 @@ The `list` method returns a paginated response:
     "items": [...],  # List of models
     "total": 100,    # Total number of items
     "size": 10,      # Number of items in current page
-    "page": 1,       # Current page number
+    "page": 1,       # Current page number (1-based)
     "pages": 10      # Total number of pages
 }
 ```
@@ -826,11 +826,11 @@ Undeletes a model by setting the `deleted` flag to False.
 **Returns:**
 - The undeleted model instance or None if not found
 
-#### `list(page: int = 0, query: Optional[List[dict]] = None, order_by: Optional[dict] = None, claims: Optional[Dict[str, Any]] = None) -> Dict[str, Any]`
+#### `list(page: int = 1, query: Optional[List[dict]] = None, order_by: Optional[dict] = None, claims: Optional[Dict[str, Any]] = None) -> Dict[str, Any]`
 Lists models with pagination and filtering.
 
 **Parameters:**
-- `page`: Page number (0-based)
+- `page`: Page number (1-based, minimum 1)
 - `query`: List of query dictionaries for filtering
 - `order_by`: Dictionary for sorting (e.g., `{"created_at": -1}`)
 - `claims`: Optional user claims for ownership verification
