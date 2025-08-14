@@ -386,6 +386,129 @@ class TestProjectRoutes:
         assert data["items"][0]["name"] == "Project 12"
         assert data["items"][1]["name"] == "Project 11"
 
+    async def test_list_multiple_order_fields(
+        self, client, auth_headers, db_engine, account
+    ):
+        """Test listing with multiple order fields."""
+        # Create test projects with different names and statuses
+        project_a = await Project(db_engine).create(
+            {
+                "name": "Project A",
+                "account_id": account.uuid,
+                "status": ProjectStatusOptions.ACTIVE.value,
+            },
+            claims={"account_id": account.uuid},
+        )
+        project_b = await Project(db_engine).create(
+            {
+                "name": "Project A",  # Same name as project_a
+                "account_id": account.uuid,
+                "status": ProjectStatusOptions.INACTIVE.value,
+            },
+            claims={"account_id": account.uuid},
+        )
+        project_c = await Project(db_engine).create(
+            {
+                "name": "Project B",
+                "account_id": account.uuid,
+                "status": ProjectStatusOptions.ACTIVE.value,
+            },
+            claims={"account_id": account.uuid},
+        )
+
+        # Test multiple fields with same direction (ascending)
+        response = client.get(
+            "/projects/?order_by=name,status&order_direction=asc",
+            headers=auth_headers,
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data["items"]) >= 3
+
+        # Find our test projects in the response
+        projects = [p for p in data["items"] if p["name"] in ["Project A", "Project B"]]
+        assert len(projects) >= 3
+
+        # Should be ordered by name first (asc), then by status (asc)
+        # Project A (active) should come before Project A (inactive)
+        # Then Project B
+        project_names = [p["name"] for p in projects[:3]]
+        project_statuses = [p["status"] for p in projects[:3]]
+
+        # Verify ordering: Project A (active), Project A (inactive), Project B
+        assert project_names[0] == "Project A"
+        assert project_names[1] == "Project A"
+        assert project_names[2] == "Project B"
+        assert project_statuses[0] == "ACTIVE"  # First Project A should be active
+        assert project_statuses[1] == "INACTIVE"  # Second Project A should be inactive
+        assert project_statuses[2] == "ACTIVE"  # Project B should be active
+
+        # Test multiple fields with same direction (descending)
+        response = client.get(
+            "/projects/?order_by=name,status&order_direction=desc",
+            headers=auth_headers,
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data["items"]) >= 3
+
+        projects = [p for p in data["items"] if p["name"] in ["Project A", "Project B"]]
+        assert len(projects) >= 3
+
+        # Should be ordered by name first (desc), then by status (desc)
+        # Project B should come first, then Project A (inactive), then Project A (active)
+        project_names = [p["name"] for p in projects[:3]]
+        project_statuses = [p["status"] for p in projects[:3]]
+
+        assert project_names[0] == "Project B"
+        assert project_names[1] == "Project A"
+        assert project_names[2] == "Project A"
+        assert project_statuses[1] == "INACTIVE"  # First Project A should be inactive
+        assert project_statuses[2] == "ACTIVE"  # Second Project A should be active
+
+        # Test multiple fields with different directions
+        response = client.get(
+            "/projects/?order_by=name,status&order_direction=asc,desc",
+            headers=auth_headers,
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data["items"]) >= 3
+
+        projects = [p for p in data["items"] if p["name"] in ["Project A", "Project B"]]
+        assert len(projects) >= 3
+
+        # Should be ordered by name first (asc), then by status (desc)
+        # Project A (inactive) should come before Project A (active)
+        # Then Project B
+        project_names = [p["name"] for p in projects[:3]]
+        project_statuses = [p["status"] for p in projects[:3]]
+
+        assert project_names[0] == "Project A"
+        assert project_names[1] == "Project A"
+        assert project_names[2] == "Project B"
+        assert project_statuses[0] == "INACTIVE"  # First Project A should be inactive
+        assert project_statuses[1] == "ACTIVE"  # Second Project A should be active
+
+        # Test error handling for mismatched number of directions
+        response = client.get(
+            "/projects/?order_by=name,status&order_direction=asc,desc,desc",
+            headers=auth_headers,
+        )
+        assert response.status_code == 400
+        assert (
+            "Number of order directions (3) must match number of order fields (2)"
+            in response.json()["detail"]
+        )
+
+        # Test error handling for invalid direction (this will be caught by regex validation)
+        response = client.get(
+            "/projects/?order_by=name,status&order_direction=asc,invalid",
+            headers=auth_headers,
+        )
+        assert response.status_code == 422
+        assert "String should match pattern" in response.json()["detail"][0]["msg"]
+
     async def test_list_projects_with_custom_pipeline(
         self, client, auth_headers, db_engine, account
     ):

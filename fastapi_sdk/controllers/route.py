@@ -166,12 +166,15 @@ class RouteController:
         @require_permission(f"{self.model_name}:read")
         async def list_route(
             request: Request,
-            page: int = Query(default=1, ge=0, description="Page number (1-based)"),
-            order_by: str = Query(default=None, description="Field to order by"),
+            page: int = Query(default=1, ge=1, description="Page number (1-based)"),
+            order_by: str = Query(
+                default=None,
+                description="Field(s) to order by (comma-separated for multiple fields)",
+            ),
             order_direction: str = Query(
                 default="asc",
-                pattern="^(asc|desc)$",
-                description="Order direction (asc or desc)",
+                pattern="^(asc|desc)(,(asc|desc))*$",
+                description="Order direction(s) (comma-separated for multiple fields, applies to all fields if single value)",
             ),
             include: List[str] = Query(
                 default=None, description="List of related objects to include"
@@ -188,9 +191,9 @@ class RouteController:
 
             Args:
                 request: The FastAPI request object
-                page: Page number (0-based)
-                order_by: Field to order by
-                order_direction: Order direction (asc or desc)
+                page: Page number (1-based)
+                order_by: Field(s) to order by (comma-separated for multiple fields)
+                order_direction: Order direction(s) (comma-separated for multiple fields, applies to all fields if single value)
                 include: List of related objects to include
                 n_per_page: Number of items per page (max 250)
                 db: The database connection
@@ -199,8 +202,14 @@ class RouteController:
                 # List accounts with pagination
                 GET /accounts/?page=1
 
-                # List accounts with ordering
+                # List accounts with single field ordering
                 GET /accounts/?order_by=created_at&order_direction=desc
+
+                # List accounts with multiple field ordering (same direction for all)
+                GET /accounts/?order_by=created_at,name&order_direction=desc
+
+                # List accounts with multiple field ordering (different directions)
+                GET /accounts/?order_by=created_at,name&order_direction=desc,asc
 
                 # List accounts with filtering
                 GET /accounts/?name=Test Account&status=active
@@ -212,23 +221,50 @@ class RouteController:
                 GET /accounts/?n_per_page=50
 
                 # Combine multiple parameters
-                GET /accounts/?page=1&order_by=created_at&order_direction=desc&include=projects&name=Test Account&n_per_page=50
+                GET /accounts/?page=1&order_by=created_at,name&order_direction=desc,asc&include=projects&name=Test Account&n_per_page=50
             """
             # Get all query parameters
             query_params = dict(request.query_params)
 
-            # Validate order_by field if provided
-            if order_by and order_by not in self.allowed_order_fields:
-                raise HTTPException(
-                    status_code=400,
-                    detail=f"Invalid order_by field: {order_by}. Allowed fields: {self.allowed_order_fields}",
-                )
-
             # Parse order_by parameter if provided
             order_by_dict = None
             if order_by:
-                direction = 1 if order_direction == "asc" else -1
-                order_by_dict = {order_by: direction}
+                # Split order_by fields
+                order_fields = [field.strip() for field in order_by.split(",")]
+
+                # Validate all order_by fields
+                for field in order_fields:
+                    if field not in self.allowed_order_fields:
+                        raise HTTPException(
+                            status_code=400,
+                            detail=f"Invalid order_by field: {field}. Allowed fields: {self.allowed_order_fields}",
+                        )
+
+                # Parse order_direction
+                order_directions = [dir.strip() for dir in order_direction.split(",")]
+
+                # If only one direction is provided, apply it to all fields
+                if len(order_directions) == 1:
+                    direction = 1 if order_directions[0] == "asc" else -1
+                    order_by_dict = {field: direction for field in order_fields}
+                else:
+                    # Validate that we have the same number of directions as fields
+                    if len(order_directions) != len(order_fields):
+                        raise HTTPException(
+                            status_code=400,
+                            detail=f"Number of order directions ({len(order_directions)}) must match number of order fields ({len(order_fields)})",
+                        )
+
+                    # Create order_by_dict with individual directions for each field
+                    order_by_dict = {}
+                    for field, direction_str in zip(order_fields, order_directions):
+                        if direction_str not in ["asc", "desc"]:
+                            raise HTTPException(
+                                status_code=400,
+                                detail=f"Invalid order direction: {direction_str}. Must be 'asc' or 'desc'",
+                            )
+                        direction = 1 if direction_str == "asc" else -1
+                        order_by_dict[field] = direction
 
             # Convert query parameters to filter list
             query_list = []

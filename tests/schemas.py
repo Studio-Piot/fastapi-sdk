@@ -17,7 +17,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from fastapi_sdk.utils.model import ShortUUIDType
 from fastapi_sdk.utils.schema import BaseResponsePaginated, datetime_now_sec
-from tests.constants import TaskStatusOptions
+from tests.constants import ProjectStatusOptions, TaskStatusOptions
 from tests.models import AssigneeModel
 
 ###########
@@ -71,6 +71,7 @@ class ProjectBase(BaseModel):
 
     name: str = Field(min_length=2, max_length=50)
     account_id: str
+    status: Optional[ProjectStatusOptions] = ProjectStatusOptions.ACTIVE
 
 
 class ProjectCreate(ProjectBase):
@@ -97,6 +98,7 @@ class ProjectResponse(ProjectBase):
     tasks: Optional[List["TaskResponse"]] = Field(default=None)
     latest_task: Optional["TaskResponse"] = Field(default=None)
     account: Optional["AccountResponse"] = Field(default=None)
+    status: Optional[ProjectStatusOptions] = Field(default=None)
     model_config = ConfigDict(from_attributes=True)
 
 

@@ -45,7 +45,7 @@ project_routes = RouteController(
     schema_create=ProjectCreate,
     schema_update=ProjectUpdate,
     allowed_query_fields=["account_id", "name", "created_at", "status"],
-    allowed_order_fields=["created_at", "name"],
+    allowed_order_fields=["created_at", "name", "status"],
 )
 
 task_routes = RouteController(
