@@ -166,7 +166,7 @@ class RouteController:
                 GET /accounts/{account_id}?include=projects&include=tasks
             """
             if include:
-                instance = await self.controller(db).get_with_relations(
+                instance = await self.controller(db).get(
                     uuid=resource_id,
                     include=include,
                     claims=request.state.claims,

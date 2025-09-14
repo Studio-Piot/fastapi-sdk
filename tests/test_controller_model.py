@@ -289,14 +289,14 @@ async def test_relationships(db_engine: AgnosticDatabase):
     )
 
     # Test getting account with related projects
-    account_with_projects = await Account(db_engine).get_with_relations(
+    account_with_projects = await Account(db_engine).get(
         uuid=account.uuid, include=["projects"], claims={"account_id": account.uuid}
     )
     assert len(account_with_projects.projects) == 1
     assert account_with_projects.projects[0].uuid == project.uuid
 
     # Test getting project with related account and tasks
-    project_with_relations = await Project(db_engine).get_with_relations(
+    project_with_relations = await Project(db_engine).get(
         uuid=project.uuid,
         include=["account", "tasks"],
         claims={"account_id": account.uuid},
