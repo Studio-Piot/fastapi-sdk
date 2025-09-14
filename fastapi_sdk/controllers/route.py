@@ -5,7 +5,7 @@ with database and user dependencies.
 """
 
 from datetime import datetime
-from typing import Any, Callable, List, Optional, Type
+from typing import Any, Callable, List, Optional, Type, Union
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel
@@ -18,6 +18,27 @@ from fastapi_sdk.utils.schema import BaseResponsePaginated
 
 class RouteController:
     """Base class for generating authenticated CRUD routes."""
+
+    @staticmethod
+    def _parse_date_value(value: str) -> Union[datetime, str]:
+        """Parse a string value as a date if it matches ISO format, otherwise return as string.
+
+        Args:
+            value: The string value to parse
+
+        Returns:
+            Parsed datetime object if it's a valid ISO date, otherwise the original string
+        """
+        try:
+            # Check if it looks like an ISO date format
+            if "T" in value or value.count("-") >= 2:
+                # Parse the date
+                parsed_date = datetime.fromisoformat(value.replace("Z", "+00:00"))
+                return parsed_date
+            return value
+        except (ValueError, TypeError):
+            # If parsing fails, return the original string
+            return value
 
     def __init__(
         self,
@@ -296,31 +317,28 @@ class RouteController:
                     if ".." in value:
                         start, end = value.split("..")
                         # Try to parse dates if they match ISO format
-                        try:
-                            # Check if the dates include time component
-                            has_time = "T" in start or "T" in end
+                        start_parsed = self._parse_date_value(start)
+                        end_parsed = self._parse_date_value(end)
 
-                            # Parse the dates
-                            start_date = datetime.fromisoformat(
-                                start.replace("Z", "+00:00")
-                            )
-                            end_date = datetime.fromisoformat(
-                                end.replace("Z", "+00:00")
-                            )
+                        if isinstance(start_parsed, datetime) and isinstance(
+                            end_parsed, datetime
+                        ):
+                            # Both are dates, check if they include time component
+                            has_time = "T" in start or "T" in end
 
                             # If no time component was provided, adjust to start/end of day
                             if not has_time:
-                                start_date = start_date.replace(
+                                start_parsed = start_parsed.replace(
                                     hour=0, minute=0, second=0, microsecond=0
                                 )
-                                end_date = end_date.replace(
+                                end_parsed = end_parsed.replace(
                                     hour=23, minute=59, second=59, microsecond=999999
                                 )
 
                             query_list.append(
-                                {field: {"$gte": start_date, "$lte": end_date}}
+                                {field: {"$gte": start_parsed, "$lte": end_parsed}}
                             )
-                        except ValueError:
+                        else:
                             # If not dates, use the original string values
                             query_list.append({field: {"$gte": start, "$lte": end}})
                     # Handle list values (e.g., status=active,pending)
@@ -338,24 +356,32 @@ class RouteController:
                                 }
                             }
                         )
-                    # Handle comparison operators (e.g., age=gt:18, price=lt:100)
+                    # Handle comparison operators (e.g., age=gt:18, price=lt:100, created_at=gt:2023-01-01)
                     elif ":" in value:
                         operator, val = value.split(":", 1)
                         if operator in ["gt", "lt", "gte", "lte"]:
-                            try:
-                                # Try to convert to float first (handles both integers and decimals)
-                                numeric_val = float(val)
-                                # If it's a whole number, convert to int
-                                if numeric_val.is_integer():
-                                    numeric_val = int(numeric_val)
+                            # Try to parse as date first
+                            parsed_val = self._parse_date_value(val)
+
+                            if isinstance(parsed_val, datetime):
+                                # Use the parsed datetime value
                                 mongo_operator = f"${operator}"
-                                query_list.append(
-                                    {field: {mongo_operator: numeric_val}}
-                                )
-                            except ValueError:
-                                # If conversion fails, use the string value directly
-                                mongo_operator = f"${operator}"
-                                query_list.append({field: {mongo_operator: val}})
+                                query_list.append({field: {mongo_operator: parsed_val}})
+                            else:
+                                # Try to convert to numeric value
+                                try:
+                                    numeric_val = float(val)
+                                    # If it's a whole number, convert to int
+                                    if numeric_val.is_integer():
+                                        numeric_val = int(numeric_val)
+                                    mongo_operator = f"${operator}"
+                                    query_list.append(
+                                        {field: {mongo_operator: numeric_val}}
+                                    )
+                                except ValueError:
+                                    # If conversion fails, use the string value directly
+                                    mongo_operator = f"${operator}"
+                                    query_list.append({field: {mongo_operator: val}})
                         else:
                             raise HTTPException(
                                 status_code=400,
@@ -363,9 +389,16 @@ class RouteController:
                             )
                     # Handle exact match (default)
                     else:
-                        query_list.append({field: value})
+                        # Try to parse as date for exact matches too
+                        parsed_val = self._parse_date_value(value)
+                        query_list.append({field: parsed_val})
                 else:
-                    query_list.append({field: value})
+                    # For non-string values, try to parse as date if it's a string
+                    if isinstance(value, str):
+                        parsed_val = self._parse_date_value(value)
+                        query_list.append({field: parsed_val})
+                    else:
+                        query_list.append({field: value})
 
             instances = await self.controller(db).list(
                 page=page,

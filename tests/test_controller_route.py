@@ -5,6 +5,7 @@ from datetime import UTC, datetime, timedelta
 import pytest
 from motor.core import AgnosticDatabase
 
+from fastapi_sdk.controllers.route import RouteController
 from fastapi_sdk.utils.test import create_access_token
 from tests.config import settings
 from tests.constants import ProjectStatusOptions
@@ -90,6 +91,96 @@ async def fixtures(db_engine: AgnosticDatabase, account: Account):
         task_121,
         task_122,
     )
+
+
+@pytest.mark.asyncio
+class TestDateParsingHelper:
+    """Test the _parse_date_value helper method."""
+
+    def test_parse_date_value_valid_dates(self):
+        """Test parsing valid date strings."""
+        # Test ISO date format
+        result = RouteController._parse_date_value("2023-06-15")
+        assert isinstance(result, datetime)
+        assert result.year == 2023
+        assert result.month == 6
+        assert result.day == 15
+
+        # Test ISO datetime format
+        result = RouteController._parse_date_value("2023-06-15T10:30:45")
+        assert isinstance(result, datetime)
+        assert result.year == 2023
+        assert result.month == 6
+        assert result.day == 15
+        assert result.hour == 10
+        assert result.minute == 30
+        assert result.second == 45
+
+        # Test ISO datetime with Z timezone
+        result = RouteController._parse_date_value("2023-06-15T10:30:45Z")
+        assert isinstance(result, datetime)
+        assert result.year == 2023
+        assert result.month == 6
+        assert result.day == 15
+        assert result.hour == 10
+        assert result.minute == 30
+        assert result.second == 45
+
+        # Test ISO datetime with timezone offset
+        result = RouteController._parse_date_value("2023-06-15T10:30:45+02:00")
+        assert isinstance(result, datetime)
+        assert result.year == 2023
+        assert result.month == 6
+        assert result.day == 15
+        assert result.hour == 10
+        assert result.minute == 30
+        assert result.second == 45
+
+    def test_parse_date_value_invalid_dates(self):
+        """Test parsing invalid date strings returns original string."""
+        # Test non-date strings
+        result = RouteController._parse_date_value("hello")
+        assert result == "hello"
+
+        result = RouteController._parse_date_value("123")
+        assert result == "123"
+
+        result = RouteController._parse_date_value("active")
+        assert result == "active"
+
+        # Test strings that look like dates but aren't valid
+        result = RouteController._parse_date_value("2023-13-45")  # Invalid month/day
+        assert result == "2023-13-45"
+
+        result = RouteController._parse_date_value(
+            "2023-06-15T25:70:90"
+        )  # Invalid time
+        assert result == "2023-06-15T25:70:90"
+
+        # Test strings with only one dash (not enough to be considered a date)
+        result = RouteController._parse_date_value("2023-06")
+        assert result == "2023-06"
+
+        result = RouteController._parse_date_value("2023")
+        assert result == "2023"
+
+    def test_parse_date_value_edge_cases(self):
+        """Test edge cases for date parsing."""
+        # Test empty string
+        result = RouteController._parse_date_value("")
+        assert result == ""
+
+        # Test string with T but no dashes
+        result = RouteController._parse_date_value("2023T10:30:45")
+        assert result == "2023T10:30:45"
+
+        # Test string with dashes but no T
+        result = RouteController._parse_date_value("2023-06-15")
+        assert isinstance(result, datetime)
+
+        # Test string with multiple T characters
+        result = RouteController._parse_date_value("2023-06-15T10:30:45Textra")
+        assert result == "2023-06-15T10:30:45Textra"
 
 
 @pytest.mark.asyncio
@@ -1439,5 +1530,272 @@ class TestDateRangeFiltering:
             headers=auth_headers,
         )
         assert response.status_code == 200  # Should still work but return no results
+        data = response.json()
+        assert len(data["items"]) == 0
+
+    async def test_date_comparison_operators(
+        self, client, auth_headers, db_engine, account
+    ):
+        """Test filtering with date comparison operators (gt, lt, gte, lte)."""
+
+        # Create test projects with different dates
+        now = datetime.now(UTC)
+        yesterday = now - timedelta(days=1)
+        tomorrow = now + timedelta(days=1)
+        next_week = now + timedelta(days=7)
+
+        # Create projects with specific dates
+        project_past = await Project(db_engine).create(
+            {
+                "name": "Project Past",
+                "account_id": account.uuid,
+                "created_at": yesterday,
+            },
+            claims={"roles": ["superuser"]},
+        )
+        project_present = await Project(db_engine).create(
+            {
+                "name": "Project Present",
+                "account_id": account.uuid,
+                "created_at": now,
+            },
+            claims={"roles": ["superuser"]},
+        )
+        project_future = await Project(db_engine).create(
+            {
+                "name": "Project Future",
+                "account_id": account.uuid,
+                "created_at": tomorrow,
+            },
+            claims={"roles": ["superuser"]},
+        )
+
+        # Test greater than (gt) - should return present and future
+        response = client.get(
+            f"/projects/?created_at=gt:{yesterday.strftime('%Y-%m-%d')}",
+            headers=auth_headers,
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data["items"]) >= 2
+        project_names = [p["name"] for p in data["items"]]
+        assert "Project Present" in project_names
+        assert "Project Future" in project_names
+
+        # Test less than (lt) - should return past and present
+        response = client.get(
+            f"/projects/?created_at=lt:{tomorrow.strftime('%Y-%m-%d')}",
+            headers=auth_headers,
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data["items"]) >= 2
+        project_names = [p["name"] for p in data["items"]]
+        assert "Project Past" in project_names
+        assert "Project Present" in project_names
+
+        # Test greater than or equal (gte) - should return present and future
+        response = client.get(
+            f"/projects/?created_at=gte:{now.strftime('%Y-%m-%d')}",
+            headers=auth_headers,
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data["items"]) >= 2
+        project_names = [p["name"] for p in data["items"]]
+        assert "Project Present" in project_names
+        assert "Project Future" in project_names
+
+        # Test less than or equal (lte) - should return past and present
+        response = client.get(
+            f"/projects/?created_at=lte:{now.strftime('%Y-%m-%d')}",
+            headers=auth_headers,
+        )
+        assert response.status_code == 200
+        data = response.json()
+        # Note: This might return fewer results due to time precision
+        assert len(data["items"]) >= 1
+        project_names = [p["name"] for p in data["items"]]
+        # At least one of these should be present
+        assert any(
+            name in project_names for name in ["Project Past", "Project Present"]
+        )
+
+    async def test_date_exact_matches(self, client, auth_headers, db_engine, account):
+        """Test filtering with exact date matches."""
+
+        # Create test projects with specific dates (using date-only format to avoid URL parsing issues)
+        specific_date = datetime(2023, 6, 15, 0, 0, 0, tzinfo=UTC)
+        different_date = datetime(2023, 6, 16, 0, 0, 0, tzinfo=UTC)
+
+        project_1 = await Project(db_engine).create(
+            {
+                "name": "Project Specific Date",
+                "account_id": account.uuid,
+                "created_at": specific_date,
+            },
+            claims={"roles": ["superuser"]},
+        )
+        project_2 = await Project(db_engine).create(
+            {
+                "name": "Project Different Date",
+                "account_id": account.uuid,
+                "created_at": different_date,
+            },
+            claims={"roles": ["superuser"]},
+        )
+
+        # Test exact date match (date-only format should work)
+        response = client.get(
+            "/projects/?created_at=2023-06-15",
+            headers=auth_headers,
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data["items"]) >= 1
+        project_names = [p["name"] for p in data["items"]]
+        assert "Project Specific Date" in project_names
+
+        # Test exact date match for different date
+        response = client.get(
+            "/projects/?created_at=2023-06-16",
+            headers=auth_headers,
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data["items"]) >= 1
+        project_names = [p["name"] for p in data["items"]]
+        assert "Project Different Date" in project_names
+
+    async def test_date_comparison_with_datetime(
+        self, client, auth_headers, db_engine, account
+    ):
+        """Test date comparison operators with datetime values."""
+
+        # Create test projects with specific datetime values
+        base_time = datetime(2023, 6, 15, 12, 0, 0, tzinfo=UTC)
+        before_time = base_time - timedelta(hours=1)  # 11:00
+        after_time = base_time + timedelta(hours=1)  # 13:00
+
+        project_before = await Project(db_engine).create(
+            {
+                "name": "Project Before",
+                "account_id": account.uuid,
+                "created_at": before_time,
+            },
+            claims={"roles": ["superuser"]},
+        )
+        project_after = await Project(db_engine).create(
+            {
+                "name": "Project After",
+                "account_id": account.uuid,
+                "created_at": after_time,
+            },
+            claims={"roles": ["superuser"]},
+        )
+
+        # Test gt with datetime - should return project after
+        response = client.get(
+            "/projects/?created_at=gt:2023-06-15T12%3A00%3A00Z",
+            headers=auth_headers,
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data["items"]) >= 1
+        project_names = [p["name"] for p in data["items"]]
+        assert "Project After" in project_names
+
+        # Test lt with datetime - should return project before
+        response = client.get(
+            "/projects/?created_at=lt:2023-06-15T12%3A00%3A00Z",
+            headers=auth_headers,
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data["items"]) >= 1
+        project_names = [p["name"] for p in data["items"]]
+        assert "Project Before" in project_names
+
+    async def test_mixed_date_and_string_queries(
+        self, client, auth_headers, db_engine, account
+    ):
+        """Test that date parsing doesn't interfere with string queries."""
+
+        # Create test projects with date-only timestamps to match exact date queries
+        specific_date = datetime(2023, 6, 15, 0, 0, 0, tzinfo=UTC)
+
+        project_1 = await Project(db_engine).create(
+            {
+                "name": "Project 2023-06-15",  # String that looks like a date
+                "account_id": account.uuid,
+                "created_at": specific_date,
+            },
+            claims={"roles": ["superuser"]},
+        )
+        project_2 = await Project(db_engine).create(
+            {
+                "name": "Project Normal",
+                "account_id": account.uuid,
+                "created_at": specific_date,
+            },
+            claims={"roles": ["superuser"]},
+        )
+
+        # Test that string queries still work (name field should not be parsed as date)
+        response = client.get(
+            "/projects/?name=Project 2023-06-15",
+            headers=auth_headers,
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data["items"]) == 1
+        assert data["items"][0]["name"] == "Project 2023-06-15"
+
+        # Test that date queries work on date fields with exact date match
+        response = client.get(
+            "/projects/?created_at=2023-06-15",
+            headers=auth_headers,
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data["items"]) >= 2  # Both projects have the same date
+
+    async def test_invalid_date_formats(self, client, auth_headers, db_engine, account):
+        """Test handling of invalid date formats."""
+
+        # Create a test project
+        await Project(db_engine).create(
+            {
+                "name": "Test Project",
+                "account_id": account.uuid,
+            },
+            claims={"roles": ["superuser"]},
+        )
+
+        # Test invalid date format in comparison operator
+        response = client.get(
+            "/projects/?created_at=gt:invalid-date",
+            headers=auth_headers,
+        )
+        assert response.status_code == 200  # Should not crash, just return no results
+        data = response.json()
+        assert len(data["items"]) == 0
+
+        # Test invalid date format in exact match
+        response = client.get(
+            "/projects/?created_at=not-a-date",
+            headers=auth_headers,
+        )
+        assert response.status_code == 200  # Should not crash, just return no results
+        data = response.json()
+        assert len(data["items"]) == 0
+
+        # Test malformed date - this should be handled gracefully
+        response = client.get(
+            "/projects/?created_at=2023-13-45",
+            headers=auth_headers,
+        )
+        # The malformed date should be treated as a string and not crash
+        assert response.status_code == 200
         data = response.json()
         assert len(data["items"]) == 0
