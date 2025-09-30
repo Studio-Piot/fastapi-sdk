@@ -657,6 +657,15 @@ class ProjectController(ModelController):
 2. **Model Field**: The field in your model to match against the claim value
 3. **Public Access**: Whether to allow access to records without ownership
 
+### Array-Based Ownership
+
+The ownership system supports both single values and arrays in the claim field:
+
+- **Single Value**: When the claim contains a single value, the system filters records where the model field matches that exact value
+- **Array of Values**: When the claim contains an array of values, the system filters records where the model field matches any value in the array
+
+This allows users to have access to records from multiple accounts, organizations, or other entities.
+
 ### Ownership in CRUD Operations
 
 The ownership rule affects all CRUD operations:
@@ -669,8 +678,10 @@ The ownership rule affects all CRUD operations:
 
 ### Example Usage
 
+#### Single Value Ownership
+
 ```python
-# User claims from JWT
+# User claims from JWT with single account
 claims = {
     "account_id": "acc_123",
     "roles": ["user"]
@@ -695,6 +706,67 @@ projects = await controller.list(claims=claims)
 # Get a project
 project = await controller.get("project_123", claims=claims)
 # Only succeeds if project.account_id = "acc_123"
+```
+
+#### Array-Based Ownership
+
+```python
+# User claims from JWT with multiple accounts
+claims = {
+    "account_id": ["acc_123", "acc_456", "acc_789"],
+    "roles": ["admin"]
+}
+
+# Create a project for any of the user's accounts
+project = await controller.create(
+    data={"name": "My Project", "account_id": "acc_123"},
+    claims=claims
+)  # Success
+
+# Create a project for another account the user has access to
+project = await controller.create(
+    data={"name": "Another Project", "account_id": "acc_456"},
+    claims=claims
+)  # Success
+
+# Try to create a project for an account the user doesn't have access to
+project = await controller.create(
+    data={"name": "Unauthorized Project", "account_id": "acc_999"},
+    claims=claims
+)  # 403 Forbidden
+
+# List projects
+projects = await controller.list(claims=claims)
+# Returns projects where account_id is in ["acc_123", "acc_456", "acc_789"]
+
+# Get a project
+project = await controller.get("project_123", claims=claims)
+# Succeeds if project.account_id is in ["acc_123", "acc_456", "acc_789"]
+
+# Update a project
+updated_project = await controller.update(
+    "project_123", 
+    {"name": "Updated Project"}, 
+    claims=claims
+)
+# Succeeds if project.account_id is in the user's account list
+
+# Delete a project
+deleted_project = await controller.delete("project_123", claims=claims)
+# Succeeds if project.account_id is in the user's account list
+```
+
+#### Empty Array Handling
+
+```python
+# User claims with empty account list
+claims = {
+    "account_id": [],
+    "roles": ["user"]
+}
+
+# All operations will fail with 403 Forbidden
+# because the user has no accounts they can access
 ```
 
 ### Error Handling
@@ -724,6 +796,19 @@ class PublicProjectController(ModelController):
 2. **Public Access**: Only enable public access when necessary
 3. **Error Messages**: Provide clear error messages for ownership violations
 4. **Testing**: Test both owned and non-owned access scenarios
+5. **Array Ownership**: When using array-based ownership:
+   - Ensure the claim field contains valid values
+   - Handle empty arrays appropriately (they will deny all access)
+   - Consider performance implications of large arrays
+   - Use consistent data types in the array (all strings, all integers, etc.)
+6. **Security**: 
+   - Validate claim values on the server side
+   - Implement proper JWT token validation
+   - Consider rate limiting for operations with large claim arrays
+7. **Performance**:
+   - Use database indexes on ownership fields
+   - Consider caching for frequently accessed ownership data
+   - Monitor query performance with large claim arrays
 
 ## Complete API Reference
 

@@ -611,6 +611,191 @@ class TestOwnership:
         deleted = await controller.delete(instance.uuid, claims=None)
         assert deleted.deleted is True
 
+    async def test_ownership_with_array_claims(self, db_engine):
+        """Test ownership filtering with array-based claims."""
+        controller = Project(db_engine)
+
+        # Create multiple accounts
+        account_1 = await Account(db_engine).create({"name": "Account 1"})
+        account_2 = await Account(db_engine).create({"name": "Account 2"})
+        account_3 = await Account(db_engine).create({"name": "Account 3"})
+
+        # Create projects for different accounts
+        project_1 = await Project(db_engine).create(
+            {"name": "Project 1", "account_id": account_1.uuid},
+            claims={"account_id": account_1.uuid},
+        )
+        project_2 = await Project(db_engine).create(
+            {"name": "Project 2", "account_id": account_2.uuid},
+            claims={"account_id": account_2.uuid},
+        )
+        project_3 = await Project(db_engine).create(
+            {"name": "Project 3", "account_id": account_3.uuid},
+            claims={"account_id": account_3.uuid},
+        )
+
+        # Test listing with array claims (should see projects for account_1 and account_2)
+        array_claims = {"account_id": [account_1.uuid, account_2.uuid]}
+        result = await controller.list(claims=array_claims)
+
+        assert len(result["items"]) == 2
+        project_uuids = [p.uuid for p in result["items"]]
+        assert project_1.uuid in project_uuids
+        assert project_2.uuid in project_uuids
+        assert project_3.uuid not in project_uuids
+
+        # Test getting individual projects with array claims
+        retrieved_project_1 = await controller.get(project_1.uuid, claims=array_claims)
+        retrieved_project_2 = await controller.get(project_2.uuid, claims=array_claims)
+        retrieved_project_3 = await controller.get(project_3.uuid, claims=array_claims)
+
+        assert retrieved_project_1 is not None
+        assert retrieved_project_2 is not None
+        assert retrieved_project_3 is None  # Should not be accessible
+
+        # Test updating with array claims
+        updated_project_1 = await controller.update(
+            project_1.uuid, {"name": "Updated Project 1"}, claims=array_claims
+        )
+        assert updated_project_1.name == "Updated Project 1"
+
+        # Try to update project_3 (should fail)
+        updated_project_3 = await controller.update(
+            project_3.uuid, {"name": "Hacked Project"}, claims=array_claims
+        )
+        assert updated_project_3 is None
+
+        # Test deleting with array claims
+        deleted_project_2 = await controller.delete(project_2.uuid, claims=array_claims)
+        assert deleted_project_2.deleted is True
+
+        # Try to delete project_3 (should fail)
+        deleted_project_3 = await controller.delete(project_3.uuid, claims=array_claims)
+        assert deleted_project_3 is None
+
+        # Test count with array claims
+        count = await controller.count(claims=array_claims)
+        assert count == 1  # Only project_1 should remain (project_2 was deleted)
+
+        # Test creating with array claims
+        new_project = await controller.create(
+            {"name": "New Project", "account_id": account_1.uuid}, claims=array_claims
+        )
+        assert new_project.name == "New Project"
+        assert new_project.account_id == account_1.uuid
+
+        # Try to create with account_3 (should fail)
+        with pytest.raises(HTTPException) as exc_info:
+            await controller.create(
+                {"name": "Unauthorized Project", "account_id": account_3.uuid},
+                claims=array_claims,
+            )
+        assert exc_info.value.status_code == 403
+        assert "Invalid account_id" in str(exc_info.value.detail)
+
+    async def test_ownership_with_single_vs_array_claims(self, db_engine):
+        """Test that single value claims and array claims work consistently."""
+        controller = Project(db_engine)
+
+        # Create an account
+        account = await Account(db_engine).create({"name": "Test Account"})
+
+        # Create a project
+        project = await Project(db_engine).create(
+            {"name": "Test Project", "account_id": account.uuid},
+            claims={"account_id": account.uuid},
+        )
+
+        # Test with single value claim
+        single_claim = {"account_id": account.uuid}
+        result_single = await controller.list(claims=single_claim)
+        assert len(result_single["items"]) == 1
+        assert result_single["items"][0].uuid == project.uuid
+
+        # Test with array containing the same value
+        array_claim = {"account_id": [account.uuid]}
+        result_array = await controller.list(claims=array_claim)
+        assert len(result_array["items"]) == 1
+        assert result_array["items"][0].uuid == project.uuid
+
+        # Both should return the same result
+        assert result_single["total"] == result_array["total"]
+        assert result_single["items"][0].uuid == result_array["items"][0].uuid
+
+    async def test_ownership_with_empty_array_claims(self, db_engine):
+        """Test ownership filtering with empty array claims."""
+        controller = Project(db_engine)
+
+        # Create an account and project
+        account = await Account(db_engine).create({"name": "Test Account"})
+        project = await Project(db_engine).create(
+            {"name": "Test Project", "account_id": account.uuid},
+            claims={"account_id": account.uuid},
+        )
+
+        # Test with empty array claim
+        empty_array_claim = {"account_id": []}
+
+        # Try to create with account_3 (should fail)
+        with pytest.raises(HTTPException) as exc_info:
+            # Should not be able to access any projects
+            await controller.list(claims=empty_array_claim)
+        assert exc_info.value.status_code == 403
+        assert "Missing required claim: account_id" in str(exc_info.value.detail)
+
+        # Should not be able to get the project
+        with pytest.raises(HTTPException) as exc_info:
+            await controller.get(project.uuid, claims=empty_array_claim)
+        assert exc_info.value.status_code == 403
+        assert "Missing required claim: account_id" in str(exc_info.value.detail)
+
+        # Should not be able to update the project
+        with pytest.raises(HTTPException) as exc_info:
+            await controller.update(
+                project.uuid, {"name": "Updated"}, claims=empty_array_claim
+            )
+        assert exc_info.value.status_code == 403
+        assert "Missing required claim: account_id" in str(exc_info.value.detail)
+
+        # Should not be able to delete the project
+        with pytest.raises(HTTPException) as exc_info:
+            await controller.delete(project.uuid, claims=empty_array_claim)
+        assert exc_info.value.status_code == 403
+        assert "Missing required claim: account_id" in str(exc_info.value.detail)
+
+        # Count should be 0
+        with pytest.raises(HTTPException) as exc_info:
+            await controller.count(claims=empty_array_claim)
+        assert exc_info.value.status_code == 403
+        assert "Missing required claim: account_id" in str(exc_info.value.detail)
+
+    async def test_ownership_with_mixed_array_claims(self, db_engine):
+        """Test ownership filtering with mixed data types in array claims."""
+        controller = Project(db_engine)
+
+        # Create accounts with different ID types
+        account_1 = await Account(db_engine).create({"name": "Account 1"})
+        account_2 = await Account(db_engine).create({"name": "Account 2"})
+
+        # Create projects
+        project_1 = await Project(db_engine).create(
+            {"name": "Project 1", "account_id": account_1.uuid},
+            claims={"account_id": account_1.uuid},
+        )
+        project_2 = await Project(db_engine).create(
+            {"name": "Project 2", "account_id": account_2.uuid},
+            claims={"account_id": account_2.uuid},
+        )
+
+        # Test with array containing both account IDs
+        mixed_claims = {"account_id": [account_1.uuid, account_2.uuid]}
+        result = await controller.list(claims=mixed_claims)
+
+        assert len(result["items"]) == 2
+        project_uuids = [p.uuid for p in result["items"]]
+        assert project_1.uuid in project_uuids
+        assert project_2.uuid in project_uuids
+
 
 @pytest.mark.asyncio
 async def test_list_with_relations(db_engine: AgnosticDatabase):

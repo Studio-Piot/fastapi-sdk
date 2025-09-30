@@ -85,7 +85,16 @@ class ModelController:
                 detail=f"Missing required claim: {self.ownership_rule.claim_field}",
             )
 
-        return {self.ownership_rule.model_field: claim_value} if claim_value else None
+        if not claim_value:
+            return None
+
+        # Handle both single values and arrays
+        if isinstance(claim_value, list):
+            # If it's an array, use $in operator for MongoDB
+            return {self.ownership_rule.model_field: {"$in": claim_value}}
+        else:
+            # If it's a single value, use direct equality
+            return {self.ownership_rule.model_field: claim_value}
 
     def _convert_embedded_model_lists(self, data_dict: dict) -> dict:
         """Convert lists of embedded models in the data dictionary.
@@ -134,14 +143,24 @@ class ModelController:
                 ownership_filter = self._get_ownership_filter(claims)
                 if ownership_filter and self.ownership_rule.model_field != "uuid":
                     # Check if the provided data matches the user's claim
-                    if (
-                        data_dict.get(self.ownership_rule.model_field)
-                        != ownership_filter[self.ownership_rule.model_field]
-                    ):
-                        raise HTTPException(
-                            status_code=403,
-                            detail=f"Invalid {self.ownership_rule.model_field}",
-                        )
+                    model_field_value = data_dict.get(self.ownership_rule.model_field)
+                    claim_value = claims.get(self.ownership_rule.claim_field)
+
+                    # Handle both single values and arrays
+                    if isinstance(claim_value, list):
+                        # If claim is an array, check if model field value is in the array
+                        if model_field_value not in claim_value:
+                            raise HTTPException(
+                                status_code=403,
+                                detail=f"Invalid {self.ownership_rule.model_field}",
+                            )
+                    else:
+                        # If claim is a single value, check direct equality
+                        if model_field_value != claim_value:
+                            raise HTTPException(
+                                status_code=403,
+                                detail=f"Invalid {self.ownership_rule.model_field}",
+                            )
 
     async def create(
         self, data: dict, claims: Optional[Dict[str, Any]] = None
@@ -296,10 +315,21 @@ class ModelController:
             if claims:
                 ownership_filter = self._get_ownership_filter(claims)
                 if ownership_filter:
-                    query = query & (
-                        getattr(self.model, self.ownership_rule.model_field)
-                        == ownership_filter[self.ownership_rule.model_field]
-                    )
+                    # Handle both single values and arrays in ownership filter
+                    filter_value = ownership_filter[self.ownership_rule.model_field]
+                    if isinstance(filter_value, dict) and "$in" in filter_value:
+                        # Array case: use $in operator
+                        query = query & (
+                            getattr(self.model, self.ownership_rule.model_field).in_(
+                                filter_value["$in"]
+                            )
+                        )
+                    else:
+                        # Single value case: use direct equality
+                        query = query & (
+                            getattr(self.model, self.ownership_rule.model_field)
+                            == filter_value
+                        )
 
         model = await self.db_engine.find_one(self.model, query)
 
