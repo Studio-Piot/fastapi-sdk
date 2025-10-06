@@ -1,7 +1,7 @@
 """Permission handling for FastAPI routes."""
 
 from functools import wraps
-from typing import Callable, Dict, List, Optional
+from typing import Callable, List, Optional
 
 from fastapi import HTTPException, Request
 

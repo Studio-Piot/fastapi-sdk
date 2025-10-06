@@ -93,7 +93,6 @@ async def fixtures(db_engine: AgnosticDatabase, account: Account):
     )
 
 
-@pytest.mark.asyncio
 class TestDateParsingHelper:
     """Test the _parse_date_value helper method."""
 

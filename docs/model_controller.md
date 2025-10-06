@@ -769,6 +769,52 @@ claims = {
 # because the user has no accounts they can access
 ```
 
+#### Ownership with User Queries
+
+The ownership system intelligently handles conflicts between ownership filters and user-provided queries:
+
+```python
+# User has access to multiple accounts
+claims = {
+    "account_id": ["acc_123", "acc_456", "acc_789"],
+    "roles": ["admin"]
+}
+
+# List all projects (returns projects for all three accounts)
+projects = await controller.list(claims=claims)
+
+# Filter for specific account (allowed if user has access)
+projects = await controller.list(
+    query=[{"account_id": "acc_123"}], 
+    claims=claims
+)  # Success - returns only projects for acc_123
+
+# Try to filter for account user doesn't have access to
+projects = await controller.list(
+    query=[{"account_id": "acc_999"}], 
+    claims=claims
+)  # 403 Forbidden - user doesn't have access to acc_999
+
+# Filter with array query that intersects with ownership
+projects = await controller.list(
+    query=[{"account_id": {"$in": ["acc_123", "acc_999"]}}], 
+    claims=claims
+)  # Success - returns only projects for acc_123 (intersection)
+
+# Filter with array query that has no intersection
+projects = await controller.list(
+    query=[{"account_id": {"$in": ["acc_999", "acc_888"]}}], 
+    claims=claims
+)  # 403 Forbidden - no intersection with user's allowed accounts
+```
+
+**How it works:**
+- If user query doesn't specify the ownership field, the ownership filter is applied normally
+- If user query specifies the same field as ownership, the system finds the intersection
+- Single value queries are checked against the ownership list
+- Array queries are intersected with the ownership list
+- If there's no intersection, access is denied with a 403 error
+
 ### Error Handling
 
 The ownership system will return appropriate errors:
@@ -801,6 +847,8 @@ class PublicProjectController(ModelController):
    - Handle empty arrays appropriately (they will deny all access)
    - Consider performance implications of large arrays
    - Use consistent data types in the array (all strings, all integers, etc.)
+   - Be aware that user queries on the same field will be intersected with ownership
+   - Design your API to handle 403 errors when users query for unauthorized values
 6. **Security**: 
    - Validate claim values on the server side
    - Implement proper JWT token validation

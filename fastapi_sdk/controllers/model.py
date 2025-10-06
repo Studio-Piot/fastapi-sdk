@@ -96,6 +96,78 @@ class ModelController:
             # If it's a single value, use direct equality
             return {self.ownership_rule.model_field: claim_value}
 
+    def _merge_ownership_with_query(
+        self, ownership_filter: Dict[str, Any], user_query: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """Merge ownership filter with user query, handling conflicts intelligently.
+
+        Args:
+            ownership_filter: The ownership filter from claims
+            user_query: The user-provided query filters
+
+        Returns:
+            Merged query dictionary
+        """
+        if not ownership_filter:
+            return user_query
+
+        merged_query = user_query.copy()
+        ownership_field = self.ownership_rule.model_field
+        ownership_value = ownership_filter[ownership_field]
+
+        # If user query doesn't have the ownership field, just add it
+        if ownership_field not in user_query:
+            merged_query[ownership_field] = ownership_value
+            return merged_query
+
+        # Handle conflict: user query has the same field as ownership
+        user_value = user_query[ownership_field]
+
+        # If ownership is a single value
+        if not isinstance(ownership_value, dict) or "$in" not in ownership_value:
+            # If user query is also a single value, they must match
+            if user_value == ownership_value:
+                merged_query[ownership_field] = ownership_value
+            else:
+                # User is trying to access something they don't own
+                raise HTTPException(
+                    status_code=403,
+                    detail=f"Access denied: {ownership_field} not in your allowed values",
+                )
+        else:
+            # Ownership is an array ($in operator)
+            ownership_list = ownership_value["$in"]
+
+            # If user query is a single value, check if it's in the ownership list
+            if not isinstance(user_value, dict) or "$in" not in user_value:
+                if user_value in ownership_list:
+                    merged_query[ownership_field] = user_value
+                else:
+                    # User is trying to access something they don't own
+                    raise HTTPException(
+                        status_code=403,
+                        detail=f"Access denied: {ownership_field} not in your allowed values",
+                    )
+            else:
+                # Both ownership and user query are arrays, find intersection
+                user_list = user_value["$in"]
+                intersection = [val for val in user_list if val in ownership_list]
+
+                if not intersection:
+                    # No intersection, user has no access
+                    raise HTTPException(
+                        status_code=403,
+                        detail=f"Access denied: {ownership_field} not in your allowed values",
+                    )
+                elif len(intersection) == 1:
+                    # Single value intersection, use direct equality
+                    merged_query[ownership_field] = intersection[0]
+                else:
+                    # Multiple values intersection, use $in
+                    merged_query[ownership_field] = {"$in": intersection}
+
+        return merged_query
+
     def _convert_embedded_model_lists(self, data_dict: dict) -> dict:
         """Convert lists of embedded models in the data dictionary.
 
@@ -442,7 +514,7 @@ class ModelController:
             if claims:
                 ownership_filter = self._get_ownership_filter(claims)
                 if ownership_filter:
-                    _query.update(ownership_filter)
+                    _query = self._merge_ownership_with_query(ownership_filter, _query)
 
         # Append pipeline stages for related objects
         if include:
@@ -592,7 +664,7 @@ class ModelController:
             if claims:
                 ownership_filter = self._get_ownership_filter(claims)
                 if ownership_filter:
-                    _query.update(ownership_filter)
+                    _query = self._merge_ownership_with_query(ownership_filter, _query)
 
         # Count the documents
         return await _collection.count_documents(_query)

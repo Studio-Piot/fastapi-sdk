@@ -796,6 +796,150 @@ class TestOwnership:
         assert project_1.uuid in project_uuids
         assert project_2.uuid in project_uuids
 
+    async def test_ownership_with_user_query_conflict(self, db_engine):
+        """Test that ownership filtering works correctly with user-provided queries."""
+        controller = Project(db_engine)
+
+        # Create multiple accounts
+        account_1 = await Account(db_engine).create({"name": "Account 1"})
+        account_2 = await Account(db_engine).create({"name": "Account 2"})
+        account_3 = await Account(db_engine).create({"name": "Account 3"})
+
+        # Create projects for different accounts
+        project_1 = await Project(db_engine).create(
+            {"name": "Project 1", "account_id": account_1.uuid},
+            claims={"account_id": account_1.uuid},
+        )
+        project_2 = await Project(db_engine).create(
+            {"name": "Project 2", "account_id": account_2.uuid},
+            claims={"account_id": account_2.uuid},
+        )
+        project_3 = await Project(db_engine).create(
+            {"name": "Project 3", "account_id": account_3.uuid},
+            claims={"account_id": account_3.uuid},
+        )
+
+        # User has access to account_1 and account_2
+        array_claims = {"account_id": [account_1.uuid, account_2.uuid]}
+
+        # Test 1: List all projects (should return projects for account_1 and account_2)
+        result = await controller.list(claims=array_claims)
+        assert len(result["items"]) == 2
+        project_uuids = [p.uuid for p in result["items"]]
+        assert project_1.uuid in project_uuids
+        assert project_2.uuid in project_uuids
+        assert project_3.uuid not in project_uuids
+
+        # Test 2: Filter for specific account that user has access to
+        result = await controller.list(
+            query=[{"account_id": account_1.uuid}], claims=array_claims
+        )
+        assert len(result["items"]) == 1
+        assert result["items"][0].uuid == project_1.uuid
+
+        # Test 3: Filter for specific account that user has access to (account_2)
+        result = await controller.list(
+            query=[{"account_id": account_2.uuid}], claims=array_claims
+        )
+        assert len(result["items"]) == 1
+        assert result["items"][0].uuid == project_2.uuid
+
+        # Test 4: Try to filter for account user doesn't have access to (should fail)
+        with pytest.raises(HTTPException) as exc_info:
+            await controller.list(
+                query=[{"account_id": account_3.uuid}], claims=array_claims
+            )
+        assert exc_info.value.status_code == 403
+        assert "Access denied: account_id not in your allowed values" in str(
+            exc_info.value.detail
+        )
+
+        # Test 5: Filter with array query that intersects with ownership
+        result = await controller.list(
+            query=[{"account_id": {"$in": [account_1.uuid, account_3.uuid]}}],
+            claims=array_claims,
+        )
+        # Should only return project_1 (intersection of user query and ownership)
+        assert len(result["items"]) == 1
+        assert result["items"][0].uuid == project_1.uuid
+
+        # Test 6: Filter with array query that has no intersection (should fail)
+        with pytest.raises(HTTPException) as exc_info:
+            await controller.list(
+                query=[{"account_id": {"$in": [account_3.uuid]}}], claims=array_claims
+            )
+        assert exc_info.value.status_code == 403
+        assert "Access denied: account_id not in your allowed values" in str(
+            exc_info.value.detail
+        )
+
+        # Test 7: Filter with array query that is subset of ownership
+        result = await controller.list(
+            query=[{"account_id": {"$in": [account_1.uuid, account_2.uuid]}}],
+            claims=array_claims,
+        )
+        # Should return both projects (full intersection)
+        assert len(result["items"]) == 2
+        project_uuids = [p.uuid for p in result["items"]]
+        assert project_1.uuid in project_uuids
+        assert project_2.uuid in project_uuids
+
+        # Test 8: Count with specific account filter
+        count = await controller.count(
+            query=[{"account_id": account_1.uuid}], claims=array_claims
+        )
+        assert count == 1
+
+        # Test 9: Count with unauthorized account filter (should fail)
+        with pytest.raises(HTTPException) as exc_info:
+            await controller.count(
+                query=[{"account_id": account_3.uuid}], claims=array_claims
+            )
+        assert exc_info.value.status_code == 403
+
+    async def test_ownership_with_single_value_claims_and_query(self, db_engine):
+        """Test ownership filtering with single value claims and user queries."""
+        controller = Project(db_engine)
+
+        # Create accounts
+        account_1 = await Account(db_engine).create({"name": "Account 1"})
+        account_2 = await Account(db_engine).create({"name": "Account 2"})
+
+        # Create projects
+        project_1 = await Project(db_engine).create(
+            {"name": "Project 1", "account_id": account_1.uuid},
+            claims={"account_id": account_1.uuid},
+        )
+        project_2 = await Project(db_engine).create(
+            {"name": "Project 2", "account_id": account_2.uuid},
+            claims={"account_id": account_2.uuid},
+        )
+
+        # User has access to only account_1
+        single_claims = {"account_id": account_1.uuid}
+
+        # Test 1: List all projects (should return only project_1)
+        result = await controller.list(claims=single_claims)
+        assert len(result["items"]) == 1
+        assert result["items"][0].uuid == project_1.uuid
+
+        # Test 2: Filter for the account user has access to
+        result = await controller.list(
+            query=[{"account_id": account_1.uuid}], claims=single_claims
+        )
+        assert len(result["items"]) == 1
+        assert result["items"][0].uuid == project_1.uuid
+
+        # Test 3: Try to filter for account user doesn't have access to (should fail)
+        with pytest.raises(HTTPException) as exc_info:
+            await controller.list(
+                query=[{"account_id": account_2.uuid}], claims=single_claims
+            )
+        assert exc_info.value.status_code == 403
+        assert "Access denied: account_id not in your allowed values" in str(
+            exc_info.value.detail
+        )
+
 
 @pytest.mark.asyncio
 async def test_list_with_relations(db_engine: AgnosticDatabase):
