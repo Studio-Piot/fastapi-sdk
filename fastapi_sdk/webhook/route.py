@@ -61,6 +61,32 @@ def create_webhook_router(
                 status_code=HTTP_400_BAD_REQUEST, detail=f"Invalid timestamp: {e}"
             ) from e
 
+        # Auto-detect timestamp format: seconds vs milliseconds
+        # Unix timestamp in seconds: 10 digits (e.g., 1640995200)
+        # Unix timestamp in milliseconds: 13 digits (e.g., 1640995200000)
+        if len(x_timestamp) == 13:
+            # Convert milliseconds to seconds
+            timestamp = timestamp // 1000
+            logger.debug(
+                "Converted millisecond timestamp to seconds",
+                extra={
+                    "original": x_timestamp,
+                    "converted": timestamp,
+                },
+            )
+        elif len(x_timestamp) == 10:
+            # Already in seconds, no conversion needed
+            pass
+        else:
+            logger.warning(
+                "Unexpected timestamp format",
+                extra={
+                    "timestamp": x_timestamp,
+                    "length": len(x_timestamp),
+                    "headers": dict(request.headers),
+                },
+            )
+
         now = int(time.time())
         if abs(now - timestamp) > max_age_seconds:
             logger.warning(

@@ -272,3 +272,40 @@ async def test_webhook_multiple_signatures(client):
 
     response = client.post("/webhook", json=payload, headers=mixed_headers)
     assert response.status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_webhook_timestamp_formats(client):
+    """Test webhook with different timestamp formats (seconds vs milliseconds)"""
+    payload = {
+        "event": "test.event",
+        "data": {"id": 1, "name": "test"},
+    }
+
+    # Test with seconds timestamp (10 digits)
+    timestamp_seconds = int(time.time())
+    body = json.dumps(payload, separators=(",", ":")).encode()
+    signature = generate_signature(settings.WEBHOOK_SECRET, body)
+
+    seconds_headers = {
+        "X-Signature": signature,
+        "X-Timestamp": str(timestamp_seconds),
+        "Content-Type": "application/json",
+    }
+
+    response = client.post("/webhook", json=payload, headers=seconds_headers)
+    assert response.status_code == 200
+
+    # Test with milliseconds timestamp (13 digits)
+    timestamp_milliseconds = int(time.time() * 1000)
+    body = json.dumps(payload, separators=(",", ":")).encode()
+    signature = generate_signature(settings.WEBHOOK_SECRET, body)
+
+    milliseconds_headers = {
+        "X-Signature": signature,
+        "X-Timestamp": str(timestamp_milliseconds),
+        "Content-Type": "application/json",
+    }
+
+    response = client.post("/webhook", json=payload, headers=milliseconds_headers)
+    assert response.status_code == 200

@@ -112,12 +112,21 @@ The system will:
 - Support plain signatures without prefixes
 - Return `403 Forbidden` only if all signatures fail validation
 
+## Timestamp Formats
+
+The webhook system automatically detects and handles different timestamp formats:
+
+- **Seconds (10 digits)**: `1640995200` - Standard Unix timestamp
+- **Milliseconds (13 digits)**: `1640995200000` - Millisecond precision timestamp
+
+The system automatically converts milliseconds to seconds for internal processing, so both formats work seamlessly.
+
 ## Sending Webhooks
 
 When sending webhooks to your endpoint, you need to include:
 
 1. A valid signature in the configured signature header (default: `X-Signature`)
-2. A timestamp in the configured timestamp header (default: `X-Timestamp`)
+2. A timestamp in the configured timestamp header (default: `X-Timestamp`) - supports both seconds and milliseconds
 3. A JSON payload with an `event` field
 
 Example request:
@@ -135,8 +144,9 @@ def send_webhook(url: str, secret: str, event: str, data: dict):
         "data": data
     }
     
-    # Create headers
-    timestamp = str(int(time.time()))
+    # Create headers (supports both seconds and milliseconds)
+    timestamp = str(int(time.time()))  # Seconds format
+    # timestamp = str(int(time.time() * 1000))  # Milliseconds format
     body = json.dumps(payload, separators=(",", ":"))  # Remove spaces
     signature = generate_signature(secret, body.encode())
     
@@ -157,6 +167,28 @@ result = send_webhook(
     event="user.created",
     data={"id": 123, "name": "John Doe"}
 )
+
+# Example with milliseconds timestamp
+def send_webhook_milliseconds(url: str, secret: str, event: str, data: dict):
+    """Send webhook with millisecond timestamp"""
+    payload = {
+        "event": event,
+        "data": data
+    }
+    
+    # Use milliseconds timestamp (13 digits)
+    timestamp = str(int(time.time() * 1000))
+    body = json.dumps(payload, separators=(",", ":"))
+    signature = generate_signature(secret, body.encode())
+    
+    headers = {
+        "X-Signature": signature,
+        "X-Timestamp": timestamp,
+        "Content-Type": "application/json"
+    }
+    
+    response = requests.post(url, json=payload, headers=headers)
+    return response.json()
 
 # Example with multiple signatures (generic key= format)
 def send_multi_signature_webhook(url: str, secret: str, event: str, data: dict):
