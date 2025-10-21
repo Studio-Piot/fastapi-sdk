@@ -87,6 +87,31 @@ custom_webhook_router = create_webhook_router(
 )
 ```
 
+## Multiple Signatures
+
+Some providers support multiple signatures in a single header, separated by commas. This is useful when multiple signing secrets are active during key rotation. The webhook system automatically handles various signature formats:
+
+```python
+# Single signature (standard format)
+"X-Signature": "4fce70bda66b2e713be09fbb7ab1b31b0c8976ea4eeb01b244db7b99aa6482cb"
+
+# Multiple signatures with versioned keys
+"Revolut-Signature": "v1=4fce70bda66b2e713be09fbb7ab1b31b0c8976ea4eeb01b244db7b99aa6482cb,v2=6ffbb59b2300aae63f272406069a9788598b792a944a07aba816edb039989a39"
+
+# Mixed format (plain, v1=, v2=, custom keys)
+"X-Signature": "4fce70bda66b2e713be09fbb7ab1b31b0c8976ea4eeb01b244db7b99aa6482cb,v1=6ffbb59b2300aae63f272406069a9788598b792a944a07aba816edb039989a39,custom_key=7ffbb59b2300aae63f272406069a9788598b792a944a07aba816edb039989a40"
+
+# Different key formats
+"X-Signature": "v1=signature1,v2=signature2,api_key=signature3,version=signature4"
+```
+
+The system will:
+- Split multiple signatures by comma
+- Try each signature until one validates successfully
+- Support any `key=` format (automatically strips the prefix)
+- Support plain signatures without prefixes
+- Return `403 Forbidden` only if all signatures fail validation
+
 ## Sending Webhooks
 
 When sending webhooks to your endpoint, you need to include:
@@ -132,6 +157,35 @@ result = send_webhook(
     event="user.created",
     data={"id": 123, "name": "John Doe"}
 )
+
+# Example with multiple signatures (generic key= format)
+def send_multi_signature_webhook(url: str, secret: str, event: str, data: dict):
+    """Send webhook with multiple signatures using different key formats"""
+    payload = {
+        "event": event,
+        "data": data
+    }
+    
+    timestamp = str(int(time.time()))
+    body = json.dumps(payload, separators=(",", ":"))
+    signature = generate_signature(secret, body.encode())
+    
+    # Create multiple signatures with different key formats
+    signatures = [
+        signature,  # Plain signature
+        f"v1={signature}",  # Versioned signature
+        f"v2={signature}",  # Different version
+        f"api_key={signature}",  # Custom key format
+    ]
+    
+    headers = {
+        "X-Signature": ",".join(signatures),
+        "X-Timestamp": timestamp,
+        "Content-Type": "application/json"
+    }
+    
+    response = requests.post(url, json=payload, headers=headers)
+    return response.json()
 ```
 
 ## Security
