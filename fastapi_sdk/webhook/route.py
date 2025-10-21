@@ -21,6 +21,8 @@ def create_webhook_router(
     max_age_seconds: int = 300,  # 5 minutes default
     prefix: str = "/webhook",
     tags: Optional[list[str]] = None,
+    signature_header: str = "X-Signature",
+    timestamp_header: str = "X-Timestamp",
 ) -> APIRouter:
     """Create a webhook router with the specified configuration.
 
@@ -29,6 +31,8 @@ def create_webhook_router(
         max_age_seconds: Maximum age of webhook requests in seconds (default: 300)
         prefix: The URL prefix for the webhook endpoint (default: "/webhook")
         tags: Optional list of tags for API documentation
+        signature_header: The header name for the webhook signature (default: "X-Signature")
+        timestamp_header: The header name for the request timestamp (default: "X-Timestamp")
 
     Returns:
         APIRouter: A configured FastAPI router for webhook handling
@@ -38,8 +42,8 @@ def create_webhook_router(
     @router.post("")
     async def webhook(
         request: Request,
-        x_signature: str = Header(..., alias="X-Signature"),
-        x_timestamp: str = Header(..., alias="X-Timestamp"),
+        x_signature: str = Header(..., alias=signature_header),
+        x_timestamp: str = Header(..., alias=timestamp_header),
     ):
         """Webhook endpoint"""
         try:

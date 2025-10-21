@@ -28,8 +28,18 @@ webhook_router = create_webhook_router(
     tags=["webhooks", "api"],         # Optional: API documentation tags
 )
 
-# Include the router in your app
+# For providers with custom header names (e.g., Revolut)
+revolut_webhook_router = create_webhook_router(
+    webhook_secret="your-revolut-secret-key",
+    prefix="/api/webhooks/revolut",
+    signature_header="Revolut-Signature",
+    timestamp_header="Revolut-Request-Timestamp",
+    tags=["revolut-webhooks"]
+)
+
+# Include the routers in your app
 app.include_router(webhook_router)
+app.include_router(revolut_webhook_router)
 ```
 
 2. Register event handlers:
@@ -52,12 +62,37 @@ async def handle_order_updated(payload: dict):
     return {"status": "processed", "order_id": order_data.get("id")}
 ```
 
+## Custom Header Names
+
+Some webhook providers use different header names for signatures and timestamps. You can configure custom header names when creating your webhook router:
+
+```python
+# Default headers (X-Signature, X-Timestamp)
+default_webhook_router = create_webhook_router(
+    webhook_secret="your-secret-key"
+)
+
+# Revolut webhook headers
+revolut_webhook_router = create_webhook_router(
+    webhook_secret="your-revolut-secret",
+    signature_header="Revolut-Signature",
+    timestamp_header="Revolut-Request-Timestamp"
+)
+
+# Any custom headers
+custom_webhook_router = create_webhook_router(
+    webhook_secret="your-secret-key",
+    signature_header="Custom-Signature-Header",
+    timestamp_header="Custom-Timestamp-Header"
+)
+```
+
 ## Sending Webhooks
 
 When sending webhooks to your endpoint, you need to include:
 
-1. A valid signature in the `X-Signature` header
-2. A timestamp in the `X-Timestamp` header
+1. A valid signature in the configured signature header (default: `X-Signature`)
+2. A timestamp in the configured timestamp header (default: `X-Timestamp`)
 3. A JSON payload with an `event` field
 
 Example request:
@@ -190,6 +225,8 @@ Parameters:
 - `max_age_seconds` (int, optional): Maximum age of webhook requests (default: 300)
 - `prefix` (str, optional): URL prefix (default: "/webhook")
 - `tags` (list[str], optional): API documentation tags
+- `signature_header` (str, optional): Header name for webhook signature (default: "X-Signature")
+- `timestamp_header` (str, optional): Header name for request timestamp (default: "X-Timestamp")
 
 ### `registry.register`
 

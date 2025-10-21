@@ -30,6 +30,16 @@ webhook_router = create_webhook_router(
     tags=["Webhook"],
 )
 
+# Create webhook router with custom header names (like Revolut)
+custom_webhook_router = create_webhook_router(
+    webhook_secret=settings.WEBHOOK_SECRET,
+    max_age_seconds=settings.WEBHOOK_MAX_AGE_SECONDS,
+    prefix="/custom-webhook",
+    signature_header="Revolut-Signature",
+    timestamp_header="Revolut-Request-Timestamp",
+    tags=["custom-webhooks"],
+)
+
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
@@ -45,6 +55,7 @@ async def lifespan(_app: FastAPI):
     app.include_router(project_routes.router)
     app.include_router(task_routes.router)
     app.include_router(webhook_router)
+    app.include_router(custom_webhook_router)
 
     yield
 

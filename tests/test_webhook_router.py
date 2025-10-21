@@ -153,3 +153,42 @@ async def test_webhook_missing_headers(client):
         headers={"X-Signature": "some-signature"},
     )
     assert response.status_code == 422  # FastAPI validation error
+
+
+@pytest.mark.asyncio
+async def test_webhook_custom_headers(client):
+    """Test webhook with custom signature and timestamp header names"""
+
+    # Test payload
+    payload = {
+        "event": "test.event",
+        "data": {"id": 1, "name": "test"},
+    }
+
+    # Create request with custom headers
+    timestamp = int(time.time())
+    body = json.dumps(payload, separators=(",", ":")).encode()
+    signature = generate_signature(settings.WEBHOOK_SECRET, body)
+
+    headers = {
+        "Revolut-Signature": signature,
+        "Revolut-Request-Timestamp": str(timestamp),
+        "Content-Type": "application/json",
+    }
+
+    # Test successful request with custom headers
+    response = client.post("/custom-webhook", json=payload, headers=headers)
+    assert response.status_code == 200
+    assert "Test handler processed" in response.json()
+
+    # Test that default headers don't work with custom router
+    default_headers = {
+        "X-Signature": signature,
+        "X-Timestamp": str(timestamp),
+        "Content-Type": "application/json",
+    }
+
+    response = client.post("/custom-webhook", json=payload, headers=default_headers)
+    assert (
+        response.status_code == 422
+    )  # FastAPI validation error for missing custom headers
