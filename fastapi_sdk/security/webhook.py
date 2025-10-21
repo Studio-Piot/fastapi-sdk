@@ -69,3 +69,71 @@ def verify_single_signature(secret: str, payload: bytes, signature: str) -> bool
         raise HTTPException(
             status_code=HTTP_400_BAD_REQUEST, detail=f"Invalid signature: {e}"
         ) from e
+
+
+def verify_revolut_signature(
+    secret: str, payload: str, timestamp: str, signature: str
+) -> bool:
+    """Verify Revolut webhook signature using their specific format
+
+    Revolut uses: v1.{timestamp}.{payload} as the message to sign
+    Signature format: v1={hmac_sha256_hash}
+
+    Args:
+        secret: The webhook signing secret
+        payload: The raw JSON payload as string
+        timestamp: The Revolut-Request-Timestamp header value
+        signature: The Revolut-Signature header value (may contain multiple signatures)
+
+    Returns:
+        bool: True if any signature is valid, False otherwise
+    """
+    try:
+        # Handle multiple signatures (comma-separated)
+        if "," in signature:
+            signatures = [s.strip() for s in signature.split(",")]
+            for sig in signatures:
+                if verify_single_revolut_signature(secret, payload, timestamp, sig):
+                    return True
+            return False
+        else:
+            return verify_single_revolut_signature(
+                secret, payload, timestamp, signature
+            )
+    except Exception as e:
+        raise HTTPException(
+            status_code=HTTP_400_BAD_REQUEST, detail=f"Invalid Revolut signature: {e}"
+        ) from e
+
+
+def verify_single_revolut_signature(
+    secret: str, payload: str, timestamp: str, signature: str
+) -> bool:
+    """Verify a single Revolut signature"""
+    try:
+        # Revolut signature format: v1={hash}
+        if not signature.startswith("v1="):
+            return False
+
+        # Extract the hash part
+        expected_hash = signature[3:]  # Remove "v1=" prefix
+
+        # Check hash length (SHA-256 produces 64 hex characters)
+        if len(expected_hash) != 64:
+            return False
+
+        # Check if hash contains only valid hex characters
+        if not re.match(r"^[0-9a-f]{64}$", expected_hash):
+            return False
+
+        # Create the payload to sign: v1.{timestamp}.{payload}
+        payload_to_sign = f"v1.{timestamp}.{payload}"
+
+        # Compute HMAC-SHA256
+        computed_hash = hmac.new(
+            key=secret.encode(), msg=payload_to_sign.encode(), digestmod=hashlib.sha256
+        ).hexdigest()
+
+        return hmac.compare_digest(computed_hash, expected_hash)
+    except (ValueError, TypeError, UnicodeError):
+        return False

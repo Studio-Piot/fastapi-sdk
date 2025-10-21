@@ -87,6 +87,49 @@ custom_webhook_router = create_webhook_router(
 )
 ```
 
+## Custom Signature Verification
+
+For webhook providers with unique signature verification requirements (like Revolut), you can provide a custom verification function:
+
+```python
+from fastapi_sdk.security.webhook import verify_revolut_signature
+
+# Custom verification function for Revolut
+def revolut_verifier(secret: str, payload: str, timestamp: str, signature: str) -> bool:
+    """Custom Revolut signature verification"""
+    return verify_revolut_signature(secret, payload, timestamp, signature)
+
+# Create webhook router with custom verification
+revolut_webhook_router = create_webhook_router(
+    webhook_secret="your-revolut-secret",
+    signature_header="Revolut-Signature",
+    timestamp_header="Revolut-Request-Timestamp",
+    signature_verifier=revolut_verifier
+)
+```
+
+### Custom Verification Function Signature
+
+The custom verification function must have this signature:
+
+```python
+def custom_verifier(secret: str, payload: str, timestamp: str, signature: str) -> bool:
+    """
+    Custom signature verification function
+    
+    Args:
+        secret: The webhook signing secret
+        payload: The raw JSON payload as string
+        timestamp: The timestamp header value
+        signature: The signature header value
+    
+    Returns:
+        bool: True if signature is valid, False otherwise
+    """
+    # Your custom verification logic here
+    return True  # or False
+```
+
 ## Multiple Signatures
 
 Some providers support multiple signatures in a single header, separated by commas. This is useful when multiple signing secrets are active during key rotation. The webhook system automatically handles various signature formats:
@@ -313,6 +356,7 @@ Parameters:
 - `tags` (list[str], optional): API documentation tags
 - `signature_header` (str, optional): Header name for webhook signature (default: "X-Signature")
 - `timestamp_header` (str, optional): Header name for request timestamp (default: "X-Timestamp")
+- `signature_verifier` (Callable, optional): Custom signature verification function
 
 ### `registry.register`
 

@@ -6,6 +6,7 @@ from fastapi import FastAPI
 
 from fastapi_sdk.controllers import ModelController
 from fastapi_sdk.middleware.auth import AuthMiddleware
+from fastapi_sdk.security.webhook import verify_revolut_signature
 from fastapi_sdk.webhook.handler import registry
 from fastapi_sdk.webhook.route import create_webhook_router
 from tests.config import settings
@@ -30,14 +31,25 @@ webhook_router = create_webhook_router(
     tags=["Webhook"],
 )
 
+
+@registry.register("ORDER_COMPLETED")
+async def handle_order_completed(payload: dict):
+    """Handle the order.completed event"""
+    return {
+        "status": "ok",
+        "result": f"Order completed with data {payload['order_id']}",
+    }
+
+
 # Create webhook router with custom header names (like Revolut)
-custom_webhook_router = create_webhook_router(
+revolut_webhook_router = create_webhook_router(
     webhook_secret=settings.WEBHOOK_SECRET,
     max_age_seconds=settings.WEBHOOK_MAX_AGE_SECONDS,
-    prefix="/custom-webhook",
+    prefix="/revolut-webhook",
     signature_header="Revolut-Signature",
     timestamp_header="Revolut-Request-Timestamp",
-    tags=["custom-webhooks"],
+    signature_verifier=verify_revolut_signature,
+    tags=["revolut-webhooks"],
 )
 
 
@@ -55,7 +67,7 @@ async def lifespan(_app: FastAPI):
     app.include_router(project_routes.router)
     app.include_router(task_routes.router)
     app.include_router(webhook_router)
-    app.include_router(custom_webhook_router)
+    app.include_router(revolut_webhook_router)
 
     yield
 

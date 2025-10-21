@@ -3,7 +3,7 @@
 import json
 import logging
 import time
-from typing import Optional
+from typing import Callable, Optional
 
 from fastapi import APIRouter, Header, HTTPException, Request
 from starlette.status import HTTP_400_BAD_REQUEST, HTTP_403_FORBIDDEN
@@ -23,6 +23,7 @@ def create_webhook_router(
     tags: Optional[list[str]] = None,
     signature_header: str = "X-Signature",
     timestamp_header: str = "X-Timestamp",
+    signature_verifier: Optional[Callable[[str, str, str, str], bool]] = None,
 ) -> APIRouter:
     """Create a webhook router with the specified configuration.
 
@@ -33,6 +34,9 @@ def create_webhook_router(
         tags: Optional list of tags for API documentation
         signature_header: The header name for the webhook signature (default: "X-Signature")
         timestamp_header: The header name for the request timestamp (default: "X-Timestamp")
+        signature_verifier: Optional custom signature verification function.
+            If provided, this function will be used instead of the default verification.
+            Function signature: (secret: str, payload: str, timestamp: str, signature: str) -> bool
 
     Returns:
         APIRouter: A configured FastAPI router for webhook handling
@@ -118,20 +122,37 @@ def create_webhook_router(
                 detail=f"Invalid JSON payload: {e}",
             ) from e
 
-        # Convert payload to bytes
-        payload_bytes = json.dumps(payload, separators=(",", ":")).encode()
-
-        if not verify_signature(webhook_secret, payload_bytes, x_signature):
-            logger.warning(
-                "Invalid webhook signature",
-                extra={
-                    "signature": x_signature,
-                    "headers": dict(request.headers),
-                },
-            )
-            raise HTTPException(
-                status_code=HTTP_403_FORBIDDEN, detail="Invalid signature"
-            )
+        # Use custom signature verification if provided, otherwise use default
+        if signature_verifier:
+            payload_str = json.dumps(payload, separators=(",", ":"))
+            if not signature_verifier(
+                webhook_secret, payload_str, x_timestamp, x_signature
+            ):
+                logger.warning(
+                    "Invalid webhook signature (custom verifier)",
+                    extra={
+                        "signature": x_signature,
+                        "timestamp": x_timestamp,
+                        "headers": dict(request.headers),
+                    },
+                )
+                raise HTTPException(
+                    status_code=HTTP_403_FORBIDDEN, detail="Invalid signature"
+                )
+        else:
+            # Use standard signature verification
+            payload_bytes = json.dumps(payload, separators=(",", ":")).encode()
+            if not verify_signature(webhook_secret, payload_bytes, x_signature):
+                logger.warning(
+                    "Invalid webhook signature",
+                    extra={
+                        "signature": x_signature,
+                        "headers": dict(request.headers),
+                    },
+                )
+                raise HTTPException(
+                    status_code=HTTP_403_FORBIDDEN, detail="Invalid signature"
+                )
 
         event = payload.get("event")
 

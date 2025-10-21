@@ -1,5 +1,7 @@
 """Tests for webhook router"""
 
+import hashlib
+import hmac
 import json
 import time
 
@@ -156,39 +158,54 @@ async def test_webhook_missing_headers(client):
 
 
 @pytest.mark.asyncio
-async def test_webhook_custom_headers(client):
+async def test_webhook_revolut_headers(client):
     """Test webhook with custom signature and timestamp header names"""
 
     # Test payload
     payload = {
-        "event": "test.event",
-        "data": {"id": 1, "name": "test"},
+        "event": "ORDER_COMPLETED",
+        "order_id": "9fc01989-3f61-4484-a5d9-ffe768531be9",
+        "merchant_order_ext_ref": "Test #3928",
     }
 
-    # Create request with custom headers
-    timestamp = int(time.time())
-    body = json.dumps(payload, separators=(",", ":")).encode()
-    signature = generate_signature(settings.WEBHOOK_SECRET, body)
+    # Test with Revolut signature format (use current timestamp)
+    timestamp = str(int(time.time() * 1000))  # Current timestamp in milliseconds
+    payload_str = json.dumps(payload, separators=(",", ":"))
+
+    # Create Revolut-style signature: v1.{timestamp}.{payload}
+    payload_to_sign = f"v1.{timestamp}.{payload_str}"
+
+    # Generate signature using HMAC-SHA256
+    signature_hash = hmac.new(
+        key=settings.WEBHOOK_SECRET.encode(),
+        msg=payload_to_sign.encode(),
+        digestmod=hashlib.sha256,
+    ).hexdigest()
+
+    revolut_signature = f"v1={signature_hash}"
 
     headers = {
-        "Revolut-Signature": signature,
+        "Revolut-Signature": revolut_signature,
         "Revolut-Request-Timestamp": str(timestamp),
         "Content-Type": "application/json",
     }
 
     # Test successful request with custom headers
-    response = client.post("/custom-webhook", json=payload, headers=headers)
+    response = client.post("/revolut-webhook", json=payload, headers=headers)
     assert response.status_code == 200
-    assert "Test handler processed" in response.json()
+    assert (
+        "Order completed with data 9fc01989-3f61-4484-a5d9-ffe768531be9"
+        in response.json()["result"]
+    )
 
     # Test that default headers don't work with custom router
     default_headers = {
-        "X-Signature": signature,
+        "X-Signature": revolut_signature,
         "X-Timestamp": str(timestamp),
         "Content-Type": "application/json",
     }
 
-    response = client.post("/custom-webhook", json=payload, headers=default_headers)
+    response = client.post("/revolut-webhook", json=payload, headers=default_headers)
     assert (
         response.status_code == 422
     )  # FastAPI validation error for missing custom headers
@@ -309,3 +326,64 @@ async def test_webhook_timestamp_formats(client):
 
     response = client.post("/webhook", json=payload, headers=milliseconds_headers)
     assert response.status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_webhook_revolut_signature(client):
+    """Test webhook with Revolut signature verification"""
+
+    # Test payload (must match Revolut format exactly)
+    payload = {
+        "event": "ORDER_COMPLETED",
+        "order_id": "9fc01989-3f61-4484-a5d9-ffe768531be9",
+        "merchant_order_ext_ref": "Test #3928",
+    }
+
+    # Test with Revolut signature format (use current timestamp)
+    timestamp = str(int(time.time() * 1000))  # Current timestamp in milliseconds
+    payload_str = json.dumps(payload, separators=(",", ":"))
+
+    # Create Revolut-style signature: v1.{timestamp}.{payload}
+    payload_to_sign = f"v1.{timestamp}.{payload_str}"
+
+    # Generate signature using HMAC-SHA256
+    signature_hash = hmac.new(
+        key=settings.WEBHOOK_SECRET.encode(),
+        msg=payload_to_sign.encode(),
+        digestmod=hashlib.sha256,
+    ).hexdigest()
+
+    revolut_signature = f"v1={signature_hash}"
+
+    revolut_headers = {
+        "Revolut-Signature": revolut_signature,
+        "Revolut-Request-Timestamp": timestamp,
+        "Content-Type": "application/json",
+    }
+
+    # Test successful Revolut webhook
+    response = client.post("/revolut-webhook", json=payload, headers=revolut_headers)
+    print(response.json())
+    assert response.status_code == 200
+
+    # Test with multiple Revolut signatures
+    multiple_signatures = f"{revolut_signature},{revolut_signature}"
+    multiple_headers = {
+        "Revolut-Signature": multiple_signatures,
+        "Revolut-Request-Timestamp": timestamp,
+        "Content-Type": "application/json",
+    }
+
+    response = client.post("/revolut-webhook", json=payload, headers=multiple_headers)
+    assert response.status_code == 200
+
+    # Test with invalid Revolut signature
+    invalid_headers = {
+        "Revolut-Signature": "v1=invalid_signature",
+        "Revolut-Request-Timestamp": timestamp,
+        "Content-Type": "application/json",
+    }
+
+    response = client.post("/revolut-webhook", json=payload, headers=invalid_headers)
+    assert response.status_code == HTTP_403_FORBIDDEN
+    assert response.json() == {"detail": "Invalid signature"}
