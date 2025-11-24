@@ -6,6 +6,8 @@ from typing import Any, Callable, Dict, List, Optional
 
 from fastapi import HTTPException, Request
 
+from fastapi_sdk.utils.constants import ErrorCode
+
 
 def require_permission(permission: str) -> Callable:
     """
@@ -37,7 +39,10 @@ def require_permission(permission: str) -> Callable:
             if not request:
                 raise HTTPException(
                     status_code=500,
-                    detail="Request object not found in route parameters",
+                    detail={
+                        "code": ErrorCode.INTERNAL_ERROR.value,
+                        "message": "Request object not found in route parameters",
+                    },
                 )
 
             # Get claims from request state
@@ -45,7 +50,10 @@ def require_permission(permission: str) -> Callable:
             if not claims:
                 raise HTTPException(
                     status_code=403,
-                    detail="No claims found in request",
+                    detail={
+                        "code": ErrorCode.NO_CLAIMS.value,
+                        "message": "No claims found in request",
+                    },
                 )
 
             # Get user permissions from claims
@@ -63,7 +71,10 @@ def require_permission(permission: str) -> Callable:
 
             raise HTTPException(
                 status_code=403,
-                detail=f"Permission denied: {permission} required",
+                detail={
+                    "code": ErrorCode.PERMISSION_DENIED.value,
+                    "message": f"Permission denied: {permission} required",
+                },
             )
 
         return wrapper
@@ -106,7 +117,10 @@ def require_combined_permission(
             if not request:
                 raise HTTPException(
                     status_code=500,
-                    detail="Request object not found in route parameters",
+                    detail={
+                        "code": ErrorCode.INTERNAL_ERROR.value,
+                        "message": "Request object not found in route parameters",
+                    },
                 )
 
             # Get claims from request state
@@ -114,7 +128,10 @@ def require_combined_permission(
             if not claims:
                 raise HTTPException(
                     status_code=403,
-                    detail="No claims found in request",
+                    detail={
+                        "code": ErrorCode.NO_CLAIMS.value,
+                        "message": "No claims found in request",
+                    },
                 )
 
             # First, check standard permission
@@ -127,7 +144,10 @@ def require_combined_permission(
                 if "superuser" not in user_roles:
                     raise HTTPException(
                         status_code=403,
-                        detail=f"Permission denied: {permission} required",
+                        detail={
+                            "code": ErrorCode.PERMISSION_DENIED.value,
+                            "message": f"Permission denied: {permission} required",
+                        },
                     )
 
             # Second, check custom permission if provided
@@ -145,7 +165,10 @@ def require_combined_permission(
                 if not result:
                     raise HTTPException(
                         status_code=403,
-                        detail=custom_permission_error_message,
+                        detail={
+                            "code": ErrorCode.PERMISSION_DENIED.value,
+                            "message": custom_permission_error_message,
+                        },
                     )
 
             return await func(*args, **kwargs)

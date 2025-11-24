@@ -1,5 +1,6 @@
 """Tests for custom permission functionality in RouteController."""
 
+import uuid
 from datetime import timedelta
 from typing import Any, Dict
 from unittest.mock import AsyncMock, Mock
@@ -12,12 +13,7 @@ from fastapi_sdk.utils.test import create_access_token
 from tests.config import settings
 from tests.controllers import Project
 from tests.db import get_db_engine
-from tests.schemas import (
-    ProjectCreate,
-    ProjectResponse,
-    ProjectResponsePaginated,
-    ProjectUpdate,
-)
+from tests.schemas import ProjectCreate, ProjectResponse, ProjectUpdate
 
 
 @pytest.mark.asyncio
@@ -99,16 +95,16 @@ class TestCustomPermissions:
     def project_routes_with_custom_permission(self):
         """Create project routes with custom permission function."""
         # Create a fresh mock for each test
+        # Use a factory function to ensure each test gets a fresh mock
         mock_func = Mock(return_value=True)
-        # Reset the mock to ensure clean state
-        mock_func.reset_mock()
+        # Use a unique prefix for each test to avoid router conflicts
+        unique_prefix = f"/test-projects-{uuid.uuid4().hex[:8]}"
         return RouteController(
-            prefix="/test-projects",
+            prefix=unique_prefix,
             tags=["Test Projects"],
             controller=Project,
             get_db=get_db_engine,
             schema_response=ProjectResponse,
-            schema_response_paginated=ProjectResponsePaginated,
             schema_create=ProjectCreate,
             schema_update=ProjectUpdate,
             allowed_query_fields=["account_id", "name"],
@@ -122,15 +118,14 @@ class TestCustomPermissions:
         """Create project routes with failing custom permission function."""
         # Create a fresh mock for each test
         mock_func = Mock(return_value=False)
-        # Reset the mock to ensure clean state
-        mock_func.reset_mock()
+        # Use a unique prefix for each test to avoid router conflicts
+        unique_prefix = f"/test-projects-failing-{uuid.uuid4().hex[:8]}"
         return RouteController(
-            prefix="/test-projects-failing",
+            prefix=unique_prefix,
             tags=["Test Projects Failing"],
             controller=Project,
             get_db=get_db_engine,
             schema_response=ProjectResponse,
-            schema_response_paginated=ProjectResponsePaginated,
             schema_create=ProjectCreate,
             schema_update=ProjectUpdate,
             allowed_query_fields=["account_id", "name"],
@@ -148,7 +143,6 @@ class TestCustomPermissions:
             controller=Project,
             get_db=get_db_engine,
             schema_response=ProjectResponse,
-            schema_response_paginated=ProjectResponsePaginated,
             schema_create=ProjectCreate,
             schema_update=ProjectUpdate,
             allowed_query_fields=["account_id", "name"],
@@ -165,13 +159,15 @@ class TestCustomPermissions:
         """Test that custom permission function is called on GET requests."""
         # Get the mock function from the route controller
         mock_func = project_routes_with_custom_permission.custom_permission_func
+        # Reset mock to ensure clean state for this test
+        mock_func.reset_mock()
 
         # Include the router in the app
         client.app.include_router(project_routes_with_custom_permission.router)
 
         # Make a GET request
         response = client.get(
-            f"/test-projects/{project.uuid}",
+            f"{project_routes_with_custom_permission.prefix}/{project.uuid}",
             headers=auth_headers_with_permissions,
         )
 
@@ -200,6 +196,8 @@ class TestCustomPermissions:
         """Test that custom permission function is called on POST requests."""
         # Get the mock function from the route controller
         mock_func = project_routes_with_custom_permission.custom_permission_func
+        # Reset mock to ensure clean state for this test
+        mock_func.reset_mock()
 
         # Include the router in the app
         client.app.include_router(project_routes_with_custom_permission.router)
@@ -207,7 +205,7 @@ class TestCustomPermissions:
         # Make a POST request
         data = {"name": "Test Project", "account_id": account.uuid}
         response = client.post(
-            "/test-projects/",
+            f"{project_routes_with_custom_permission.prefix}/",
             json=data,
             headers=auth_headers_with_permissions,
         )
@@ -233,13 +231,15 @@ class TestCustomPermissions:
         """Test that custom permission function is called on GET list requests."""
         # Get the mock function from the route controller
         mock_func = project_routes_with_custom_permission.custom_permission_func
+        # Reset mock to ensure clean state for this test
+        mock_func.reset_mock()
 
         # Include the router in the app
         client.app.include_router(project_routes_with_custom_permission.router)
 
         # Make a GET request to list
         response = client.get(
-            "/test-projects/",
+            f"{project_routes_with_custom_permission.prefix}/",
             headers=auth_headers_with_permissions,
         )
 
@@ -259,6 +259,8 @@ class TestCustomPermissions:
         """Test that custom permission function is called on PUT requests."""
         # Get the mock function from the route controller
         mock_func = project_routes_with_custom_permission.custom_permission_func
+        # Reset mock to ensure clean state for this test
+        mock_func.reset_mock()
 
         # Include the router in the app
         client.app.include_router(project_routes_with_custom_permission.router)
@@ -266,7 +268,7 @@ class TestCustomPermissions:
         # Make a PUT request
         data = {"name": "Updated Project"}
         response = client.put(
-            f"/test-projects/{project.uuid}",
+            f"{project_routes_with_custom_permission.prefix}/{project.uuid}",
             json=data,
             headers=auth_headers_with_permissions,
         )
@@ -291,13 +293,15 @@ class TestCustomPermissions:
         """Test that custom permission function is called on DELETE requests."""
         # Get the mock function from the route controller
         mock_func = project_routes_with_custom_permission.custom_permission_func
+        # Reset mock to ensure clean state for this test
+        mock_func.reset_mock()
 
         # Include the router in the app
         client.app.include_router(project_routes_with_custom_permission.router)
 
         # Make a DELETE request
         response = client.delete(
-            f"/test-projects/{project.uuid}",
+            f"{project_routes_with_custom_permission.prefix}/{project.uuid}",
             headers=auth_headers_with_permissions,
         )
 
@@ -321,13 +325,15 @@ class TestCustomPermissions:
         """Test that custom permission function denies access when it returns False."""
         # Get the mock function from the route controller
         mock_func = project_routes_with_failing_custom_permission.custom_permission_func
+        # Reset mock to ensure clean state for this test
+        mock_func.reset_mock()
 
         # Include the router in the app
         client.app.include_router(project_routes_with_failing_custom_permission.router)
 
         # Make a GET request
         response = client.get(
-            f"/test-projects-failing/{project.uuid}",
+            f"{project_routes_with_failing_custom_permission.prefix}/{project.uuid}",
             headers=auth_headers_with_permissions,
         )
 
@@ -336,7 +342,9 @@ class TestCustomPermissions:
 
         # Verify the request was denied with custom error message
         assert response.status_code == 403
-        assert response.json()["detail"] == "Custom permission denied"
+        result = response.json()
+        assert result["status"]["code"] == 403
+        assert result["errors"][0]["message"] == "Custom permission denied"
 
     async def test_standard_permission_still_required_with_custom_permission(
         self,
@@ -348,19 +356,23 @@ class TestCustomPermissions:
         """Test that standard permission is still required even with custom permission function."""
         # Get the mock function from the route controller
         mock_func = project_routes_with_custom_permission.custom_permission_func
+        # Reset mock to ensure clean state for this test
+        mock_func.reset_mock()
 
         # Include the router in the app
         client.app.include_router(project_routes_with_custom_permission.router)
 
         # Make a GET request without standard permissions
         response = client.get(
-            f"/test-projects/{project.uuid}",
+            f"{project_routes_with_custom_permission.prefix}/{project.uuid}",
             headers=auth_headers_without_permissions,
         )
 
         # Verify the request was denied due to missing standard permission
         assert response.status_code == 403
-        assert "project:read" in response.json()["detail"]
+        result = response.json()
+        assert result["status"]["code"] == 403
+        assert "project:read" in result["errors"][0]["message"]
 
         # Verify the custom permission function was NOT called
         # because standard permission check failed first
@@ -376,13 +388,15 @@ class TestCustomPermissions:
         """Test that custom permission function receives correct resource data."""
         # Get the mock function from the route controller
         mock_func = project_routes_with_custom_permission.custom_permission_func
+        # Reset mock to ensure clean state for this test
+        mock_func.reset_mock()
 
         # Include the router in the app
         client.app.include_router(project_routes_with_custom_permission.router)
 
         # Make a GET request
         client.get(
-            f"/test-projects/{project.uuid}",
+            f"{project_routes_with_custom_permission.prefix}/{project.uuid}",
             headers=auth_headers_with_permissions,
         )
 
@@ -411,6 +425,8 @@ class TestCustomPermissions:
         """Test that custom permission function receives data for POST requests."""
         # Get the mock function from the route controller
         mock_func = project_routes_with_custom_permission.custom_permission_func
+        # Reset mock to ensure clean state for this test
+        mock_func.reset_mock()
 
         # Include the router in the app
         client.app.include_router(project_routes_with_custom_permission.router)
@@ -418,7 +434,7 @@ class TestCustomPermissions:
         # Make a POST request
         data = {"name": "Test Project", "account_id": account.uuid}
         client.post(
-            "/test-projects/",
+            f"{project_routes_with_custom_permission.prefix}/",
             json=data,
             headers=auth_headers_with_permissions,
         )
@@ -432,7 +448,13 @@ class TestCustomPermissions:
 
         # Should contain the data for POST requests
         assert "data" in resource_data
-        assert resource_data["data"] == data
+        # The data is a Pydantic model, so we need to compare the dict representation
+        data_dict = resource_data["data"]
+        if hasattr(data_dict, "model_dump"):
+            data_dict = data_dict.model_dump()
+        # Only compare the fields that were in the original request
+        assert data_dict["name"] == data["name"]
+        assert data_dict["account_id"] == data["account_id"]
 
     async def test_no_custom_permission_function_works_normally(
         self,
@@ -477,7 +499,6 @@ class TestCustomPermissions:
             controller=Project,
             get_db=get_db_engine,
             schema_response=ProjectResponse,
-            schema_response_paginated=ProjectResponsePaginated,
             schema_create=ProjectCreate,
             schema_update=ProjectUpdate,
             allowed_query_fields=["account_id", "name"],
@@ -531,7 +552,6 @@ class TestCustomPermissions:
             controller=Project,
             get_db=get_db_engine,
             schema_response=ProjectResponse,
-            schema_response_paginated=ProjectResponsePaginated,
             schema_create=ProjectCreate,
             schema_update=ProjectUpdate,
             allowed_query_fields=["account_id", "name"],
@@ -551,4 +571,6 @@ class TestCustomPermissions:
 
         # Verify the request was denied due to custom permission check
         assert response.status_code == 403
-        assert response.json()["detail"] == "Account ID required"
+        result = response.json()
+        assert result["status"]["code"] == 403
+        assert result["errors"][0]["message"] == "Account ID required"

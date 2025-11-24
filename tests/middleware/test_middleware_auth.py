@@ -7,6 +7,7 @@ from fastapi import FastAPI, Request
 from starlette.testclient import TestClient
 
 from fastapi_sdk.middleware.auth import AuthMiddleware
+from fastapi_sdk.utils.constants import ErrorCode
 from fastapi_sdk.utils.test import create_access_token
 from tests.config import settings
 
@@ -107,7 +108,14 @@ def test_protected_route_without_token(app, auth_middleware):
     client = TestClient(app)
     response = client.get("/protected")
     assert response.status_code == 401
-    assert response.json() == {"detail": "Missing or invalid Authorization header"}
+    response_data = response.json()
+    assert response_data["status"]["code"] == 401
+    assert response_data["status"]["message"] == "Unauthorized"
+    assert response_data["errors"][0]["code"] == ErrorCode.MISSING_AUTH_HEADER.value
+    assert (
+        response_data["errors"][0]["message"]
+        == "Missing or invalid Authorization header"
+    )
 
 
 def test_protected_route_with_invalid_token(app, auth_middleware):
@@ -138,7 +146,14 @@ def test_protected_route_with_malformed_header(app, auth_middleware):
         headers={"Authorization": "malformed-header"},
     )
     assert response.status_code == 401
-    assert response.json() == {"detail": "Missing or invalid Authorization header"}
+    response_data = response.json()
+    assert response_data["status"]["code"] == 401
+    assert response_data["status"]["message"] == "Unauthorized"
+    assert response_data["errors"][0]["code"] == ErrorCode.MISSING_AUTH_HEADER.value
+    assert (
+        response_data["errors"][0]["message"]
+        == "Missing or invalid Authorization header"
+    )
 
 
 def test_protected_route_with_expired_token(app, auth_middleware):
@@ -192,7 +207,14 @@ def test_protected_route_with_wrong_issuer(app, auth_middleware):
         headers={"Authorization": f"Bearer {wrong_issuer_token}"},
     )
     assert response.status_code == 401
-    assert "issuer does not match" in response.json()["detail"]
+    response_data = response.json()
+    assert response_data["status"]["code"] == 401
+    assert response_data["status"]["message"] == "Unauthorized"
+    assert response_data["errors"][0]["code"] == ErrorCode.INVALID_TOKEN.value
+    assert (
+        response_data["errors"][0]["message"]
+        == "Token verification failed: Token issuer does not match auth_issuer"
+    )
 
 
 def test_protected_route_with_wrong_client_id(app, auth_middleware):

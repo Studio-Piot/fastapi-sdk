@@ -52,10 +52,10 @@ async def test_webhook_success(client):
 
     response = client.post("/webhook", json=data, headers=headers)
     assert response.status_code == 200
-    assert response.json() == {
-        "status": "ok",
-        "result": "Account created with data test",
-    }
+    result = response.json()
+    assert result["status"]["code"] == 200
+    assert result["status"]["message"] == "OK"
+    assert result["data"]["result"] == "Account created with data test"
 
 
 @pytest.mark.asyncio
@@ -69,7 +69,9 @@ async def test_webhook_invalid_signature(client):
 
     response = client.post("/webhook", json=data, headers=headers)
     assert response.status_code == HTTP_403_FORBIDDEN
-    assert response.json() == {"detail": "Invalid signature"}
+    result = response.json()
+    assert result["status"]["code"] == 403
+    assert result["errors"][0]["message"] == "Invalid signature"
 
 
 @pytest.mark.asyncio
@@ -85,7 +87,9 @@ async def test_webhook_expired_request(client):
 
     response = client.post("/webhook", json=data, headers=headers)
     assert response.status_code == HTTP_403_FORBIDDEN
-    assert response.json() == {"detail": "Request expired"}
+    result = response.json()
+    assert result["status"]["code"] == 403
+    assert result["errors"][0]["message"] == "Request expired"
 
 
 @pytest.mark.asyncio
@@ -100,7 +104,9 @@ async def test_webhook_invalid_timestamp(client):
 
     response = client.post("/webhook", json=data, headers=headers)
     assert response.status_code == HTTP_400_BAD_REQUEST
-    assert "Invalid timestamp" in response.json()["detail"]
+    result = response.json()
+    assert result["status"]["code"] == 400
+    assert "Invalid timestamp" in result["errors"][0]["message"]
 
 
 @pytest.mark.asyncio
@@ -113,7 +119,9 @@ async def test_webhook_missing_event(client):
 
     response = client.post("/webhook", json=data, headers=headers)
     assert response.status_code == HTTP_400_BAD_REQUEST
-    assert response.json() == {"detail": "Missing event in payload"}
+    result = response.json()
+    assert result["status"]["code"] == 400
+    assert result["errors"][0]["message"] == "Missing event in payload"
 
 
 @pytest.mark.asyncio
@@ -127,9 +135,12 @@ async def test_webhook_unregistered_event(client):
 
     response = client.post("/webhook", json=data, headers=headers)
     assert response.status_code == HTTP_400_BAD_REQUEST
-    assert response.json() == {
-        "detail": "No handler registered for event: nonexistent.event"
-    }
+    result = response.json()
+    assert result["status"]["code"] == 400
+    assert (
+        result["errors"][0]["message"]
+        == "No handler registered for event: nonexistent.event"
+    )
 
 
 @pytest.mark.asyncio
@@ -193,9 +204,11 @@ async def test_webhook_revolut_headers(client):
     # Test successful request with custom headers
     response = client.post("/revolut-webhook", json=payload, headers=headers)
     assert response.status_code == 200
+    result = response.json()
+    assert result["status"]["code"] == 200
     assert (
         "Order completed with data 9fc01989-3f61-4484-a5d9-ffe768531be9"
-        in response.json()["result"]
+        in result["data"]["result"]
     )
 
     # Test that default headers don't work with custom router
@@ -278,7 +291,9 @@ async def test_webhook_multiple_signatures(client):
 
     response = client.post("/webhook", json=payload, headers=invalid_multiple_headers)
     assert response.status_code == HTTP_403_FORBIDDEN
-    assert response.json() == {"detail": "Invalid signature"}
+    result = response.json()
+    assert result["status"]["code"] == 403
+    assert result["errors"][0]["message"] == "Invalid signature"
 
     # Test mixed format (plain, v1=, and v2=)
     mixed_headers = {
@@ -363,8 +378,9 @@ async def test_webhook_revolut_signature(client):
 
     # Test successful Revolut webhook
     response = client.post("/revolut-webhook", json=payload, headers=revolut_headers)
-    print(response.json())
     assert response.status_code == 200
+    result = response.json()
+    assert result["status"]["code"] == 200
 
     # Test with multiple Revolut signatures
     multiple_signatures = f"{revolut_signature},{revolut_signature}"
@@ -386,4 +402,6 @@ async def test_webhook_revolut_signature(client):
 
     response = client.post("/revolut-webhook", json=payload, headers=invalid_headers)
     assert response.status_code == HTTP_403_FORBIDDEN
-    assert response.json() == {"detail": "Invalid signature"}
+    result = response.json()
+    assert result["status"]["code"] == 403
+    assert result["errors"][0]["message"] == "Invalid signature"

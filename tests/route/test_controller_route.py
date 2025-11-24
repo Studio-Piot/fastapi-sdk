@@ -194,7 +194,10 @@ class TestAccountRoutes:
             json={"name": "Test Account"},
         )
         assert response.status_code == 201
-        data = response.json()
+        result = response.json()
+        assert result["status"]["code"] == 201
+        assert result["status"]["message"] == "Created"
+        data = result["data"]
         assert data["name"] == "Test Account"
         assert "uuid" in data
         assert "created_at" in data
@@ -204,7 +207,10 @@ class TestAccountRoutes:
         """Test getting an account by ID."""
         response = client.get(f"/accounts/{account.uuid}", headers=auth_headers)
         assert response.status_code == 200
-        data = response.json()
+        result = response.json()
+        assert result["status"]["code"] == 200
+        assert result["status"]["message"] == "OK"
+        data = result["data"]
         assert data["uuid"] == account.uuid
         assert data["name"] == account.name
 
@@ -212,9 +218,12 @@ class TestAccountRoutes:
         """Test listing accounts."""
         response = client.get("/accounts/", headers=auth_headers)
         assert response.status_code == 200
-        data = response.json()
-        assert len(data["items"]) >= 1
-        assert any(a["uuid"] == account.uuid for a in data["items"])
+        result = response.json()
+        assert result["status"]["code"] == 200
+        assert result["status"]["message"] == "OK"
+        data = result["data"]
+        assert len(data) >= 1
+        assert any(a["uuid"] == account.uuid for a in data)
 
     async def test_update_account(self, client, auth_headers, account):
         """Test updating an account."""
@@ -224,14 +233,18 @@ class TestAccountRoutes:
             json={"name": "Updated Account"},
         )
         assert response.status_code == 200
-        data = response.json()
+        result = response.json()
+        assert result["status"]["code"] == 200
+        data = result["data"]
         assert data["name"] == "Updated Account"
 
     async def test_delete_account(self, client, auth_headers, account):
         """Test deleting an account."""
         response = client.delete(f"/accounts/{account.uuid}", headers=auth_headers)
         assert response.status_code == 200
-        assert response.json() == {"detail": "Resource soft deleted"}
+        result = response.json()
+        assert result["status"]["code"] == 200
+        assert result["data"]["message"] == "Resource soft deleted"
 
     # TODO: Fix this test
     # Only a superuser can list all top level resources, so we need to mock a superuser
@@ -259,7 +272,9 @@ class TestProjectRoutes:
             },
         )
         assert response.status_code == 201
-        data = response.json()
+        result = response.json()
+        assert result["status"]["code"] == 201
+        data = result["data"]
         assert data["name"] == "Test Project"
         assert data["account_id"] == account.uuid
 
@@ -267,7 +282,8 @@ class TestProjectRoutes:
         """Test getting a project by ID."""
         response = client.get(f"/projects/{project.uuid}", headers=auth_headers)
         assert response.status_code == 200
-        data = response.json()
+        result = response.json()
+        data = result["data"]
         assert data["uuid"] == project.uuid
         assert data["name"] == project.name
 
@@ -275,9 +291,10 @@ class TestProjectRoutes:
         """Test listing projects."""
         response = client.get("/projects/", headers=auth_headers)
         assert response.status_code == 200
-        data = response.json()
-        assert len(data["items"]) >= 1
-        assert any(p["uuid"] == project.uuid for p in data["items"])
+        result = response.json()
+        data = result["data"]
+        assert len(data) >= 1
+        assert any(p["uuid"] == project.uuid for p in data)
 
     async def test_update_project(self, client, auth_headers, project):
         """Test updating a project."""
@@ -287,7 +304,8 @@ class TestProjectRoutes:
             json={"name": "Updated Project"},
         )
         assert response.status_code == 200
-        data = response.json()
+        result = response.json()
+        data = result["data"]
         assert data["name"] == "Updated Project"
         assert data["account_id"] == project.account_id  # Unchanged
 
@@ -295,15 +313,17 @@ class TestProjectRoutes:
         """Test deleting a project."""
         response = client.delete(f"/projects/{project.uuid}", headers=auth_headers)
         assert response.status_code == 200
-        assert response.json() == {"detail": "Resource soft deleted"}
+        result = response.json()
+        assert result["data"]["message"] == "Resource soft deleted"
 
     async def test_list_deleted_projects(self, client, auth_headers, deleted_project):
         """Test listing deleted projects."""
         response = client.get("/projects/deleted/", headers=auth_headers)
         assert response.status_code == 200
-        data = response.json()
-        assert len(data["items"]) >= 1
-        assert any(p["uuid"] == deleted_project.uuid for p in data["items"])
+        result = response.json()
+        data = result["data"]
+        assert len(data) >= 1
+        assert any(p["uuid"] == deleted_project.uuid for p in data)
 
     async def test_list_allowed_query_fields(
         self, client, auth_headers, db_engine, account
@@ -324,17 +344,19 @@ class TestProjectRoutes:
         ) = await fixtures(db_engine, account)
         response = client.get("/projects/?name=Project 11", headers=auth_headers)
         assert response.status_code == 200
-        data = response.json()
-        assert len(data["items"]) == 1
-        assert any(a["name"] == "Project 11" for a in data["items"])
+        result = response.json()
+        data = result["data"]
+        assert len(data) == 1
+        assert any(a["name"] == "Project 11" for a in data)
 
         response = client.get(
             f"/projects/?account_id={account.uuid}", headers=auth_headers
         )
         assert response.status_code == 200
-        data = response.json()
-        assert len(data["items"]) == 2
-        assert any(a["account_id"] == account.uuid for a in data["items"])
+        result = response.json()
+        data = result["data"]
+        assert len(data) == 2
+        assert any(a["account_id"] == account.uuid for a in data)
 
     async def test_query_parameter_handling(
         self, client, auth_headers, db_engine, account
@@ -363,20 +385,23 @@ class TestProjectRoutes:
             "/projects/?created_at=2023-01-01..2023-12-31", headers=auth_headers
         )
         assert response.status_code == 200
-        data = response.json()
-        assert len(data["items"]) >= 0  # Just verify the request succeeds
+        result = response.json()
+        data = result["data"]
+        assert len(data) >= 0  # Just verify the request succeeds
 
         # Test list values
         response = client.get("/projects/?status=active,pending", headers=auth_headers)
         assert response.status_code == 200
-        data = response.json()
-        assert len(data["items"]) >= 0
+        result = response.json()
+        data = result["data"]
+        assert len(data) >= 0
 
         # Test contains match
         response = client.get("/projects/?name=*Test*", headers=auth_headers)
         assert response.status_code == 200
-        data = response.json()
-        assert len(data["items"]) >= 0
+        result = response.json()
+        data = result["data"]
+        assert len(data) >= 0
 
         # Test comparison operators
         # Greater than
@@ -384,47 +409,54 @@ class TestProjectRoutes:
             "/projects/?created_at=gt:2023-01-01", headers=auth_headers
         )
         assert response.status_code == 200
-        data = response.json()
-        assert len(data["items"]) >= 0
+        result = response.json()
+        data = result["data"]
+        assert len(data) >= 0
 
         # Less than
         response = client.get(
             "/projects/?created_at=lt:2023-12-31", headers=auth_headers
         )
         assert response.status_code == 200
-        data = response.json()
-        assert len(data["items"]) >= 0
+        result = response.json()
+        data = result["data"]
+        assert len(data) >= 0
 
         # Greater than or equal
         response = client.get(
             "/projects/?created_at=gte:2023-01-01", headers=auth_headers
         )
         assert response.status_code == 200
-        data = response.json()
-        assert len(data["items"]) >= 0
+        result = response.json()
+        data = result["data"]
+        assert len(data) >= 0
 
         # Less than or equal
         response = client.get(
             "/projects/?created_at=lte:2023-12-31", headers=auth_headers
         )
         assert response.status_code == 200
-        data = response.json()
-        assert len(data["items"]) >= 0
+        result = response.json()
+        data = result["data"]
+        assert len(data) >= 0
 
         # Test exact match
         response = client.get("/projects/?name=Test Project", headers=auth_headers)
         assert response.status_code == 200
-        data = response.json()
-        assert len(data["items"]) == 1
-        assert data["items"][0]["name"] == "Test Project"
+        result = response.json()
+        data = result["data"]
+        assert len(data) == 1
+        assert data[0]["name"] == "Test Project"
 
         # Test invalid comparison operator
         response = client.get(
             "/projects/?created_at=invalid:2023-01-01", headers=auth_headers
         )
         assert response.status_code == 400
+        result = response.json()
+        assert result["status"]["code"] == 400
         assert (
-            response.json()["detail"]
+            result["errors"][0]["message"]
             == "Invalid comparison operator: invalid. Allowed operators: gt, lt, gte, lte"
         )
 
@@ -434,13 +466,15 @@ class TestProjectRoutes:
             headers=auth_headers,
         )
         assert response.status_code == 200
-        data = response.json()
-        assert len(data["items"]) >= 0
+        result = response.json()
+        data = result["data"]
+        assert len(data) >= 0
 
         # Test querying non-allowed field
         response = client.get("/projects/?invalid_field=value", headers=auth_headers)
         assert response.status_code == 400
-        assert "Invalid query field: invalid_field" in response.json()["detail"]
+        result = response.json()
+        assert "Invalid query field: invalid_field" in result["errors"][0]["message"]
 
     async def test_list_allowed_order_fields(
         self, client, auth_headers, db_engine, account
@@ -461,20 +495,22 @@ class TestProjectRoutes:
         ) = await fixtures(db_engine, account)
         response = client.get("/projects/?order_by=name", headers=auth_headers)
         assert response.status_code == 200
-        data = response.json()
-        assert len(data["items"]) == 2
-        assert data["items"][0]["name"] == "Project 11"
-        assert data["items"][1]["name"] == "Project 12"
+        result = response.json()
+        data = result["data"]
+        assert len(data) == 2
+        assert data[0]["name"] == "Project 11"
+        assert data[1]["name"] == "Project 12"
 
         # Reverse order
         response = client.get(
             "/projects/?order_by=name&order_direction=desc", headers=auth_headers
         )
         assert response.status_code == 200
-        data = response.json()
-        assert len(data["items"]) == 2
-        assert data["items"][0]["name"] == "Project 12"
-        assert data["items"][1]["name"] == "Project 11"
+        result = response.json()
+        data = result["data"]
+        assert len(data) == 2
+        assert data[0]["name"] == "Project 12"
+        assert data[1]["name"] == "Project 11"
 
     async def test_list_multiple_order_fields(
         self, client, auth_headers, db_engine, account
@@ -512,11 +548,12 @@ class TestProjectRoutes:
             headers=auth_headers,
         )
         assert response.status_code == 200
-        data = response.json()
-        assert len(data["items"]) >= 3
+        result = response.json()
+        data = result["data"]
+        assert len(data) >= 3
 
         # Find our test projects in the response
-        projects = [p for p in data["items"] if p["name"] in ["Project A", "Project B"]]
+        projects = [p for p in data if p["name"] in ["Project A", "Project B"]]
         assert len(projects) >= 3
 
         # Should be ordered by name first (asc), then by status (asc)
@@ -539,10 +576,11 @@ class TestProjectRoutes:
             headers=auth_headers,
         )
         assert response.status_code == 200
-        data = response.json()
-        assert len(data["items"]) >= 3
+        result = response.json()
+        data = result["data"]
+        assert len(data) >= 3
 
-        projects = [p for p in data["items"] if p["name"] in ["Project A", "Project B"]]
+        projects = [p for p in data if p["name"] in ["Project A", "Project B"]]
         assert len(projects) >= 3
 
         # Should be ordered by name first (desc), then by status (desc)
@@ -562,10 +600,11 @@ class TestProjectRoutes:
             headers=auth_headers,
         )
         assert response.status_code == 200
-        data = response.json()
-        assert len(data["items"]) >= 3
+        result = response.json()
+        data = result["data"]
+        assert len(data) >= 3
 
-        projects = [p for p in data["items"] if p["name"] in ["Project A", "Project B"]]
+        projects = [p for p in data if p["name"] in ["Project A", "Project B"]]
         assert len(projects) >= 3
 
         # Should be ordered by name first (asc), then by status (desc)
@@ -586,9 +625,10 @@ class TestProjectRoutes:
             headers=auth_headers,
         )
         assert response.status_code == 400
+        result = response.json()
         assert (
             "Number of order directions (3) must match number of order fields (2)"
-            in response.json()["detail"]
+            in result["errors"][0]["message"]
         )
 
         # Test error handling for invalid direction (this will be caught by regex validation)
@@ -597,7 +637,8 @@ class TestProjectRoutes:
             headers=auth_headers,
         )
         assert response.status_code == 422
-        assert "String should match pattern" in response.json()["detail"][0]["msg"]
+        result = response.json()
+        assert "String should match pattern" in result["errors"][0]["message"]
 
     async def test_list_projects_with_custom_pipeline(
         self, client, auth_headers, db_engine, account
@@ -621,17 +662,18 @@ class TestProjectRoutes:
         # Test the list endpoint
         response = client.get("/projects/", headers=auth_headers)
         assert response.status_code == 200
-        data = response.json()
+        result = response.json()
+        data = result["data"]
 
         # Find project 11 in the response
-        project_11_data = next(p for p in data["items"] if p["uuid"] == project_11.uuid)
+        project_11_data = next(p for p in data if p["uuid"] == project_11.uuid)
         assert "latest_task" in project_11_data
         assert (
             project_11_data["latest_task"]["uuid"] == task_113.uuid
         )  # Last task by name
 
         # Find project 12 in the response
-        project_12_data = next(p for p in data["items"] if p["uuid"] == project_12.uuid)
+        project_12_data = next(p for p in data if p["uuid"] == project_12.uuid)
         assert "latest_task" in project_12_data
         assert (
             project_12_data["latest_task"]["uuid"] == task_122.uuid
@@ -655,7 +697,8 @@ class TestTaskRoutes:
             },
         )
         assert response.status_code == 201
-        data = response.json()
+        result = response.json()
+        data = result["data"]
         assert data["description"] == "Test Description"
         assert data["project_id"] == project.uuid
         assert data["account_id"] == account.uuid
@@ -664,7 +707,8 @@ class TestTaskRoutes:
         """Test getting a task by ID."""
         response = client.get(f"/tasks/{task.uuid}", headers=auth_headers)
         assert response.status_code == 200
-        data = response.json()
+        result = response.json()
+        data = result["data"]
         assert data["uuid"] == task.uuid
         assert data["description"] == task.description
 
@@ -677,7 +721,8 @@ class TestTaskRoutes:
             f"/accounts/{account.uuid}?include=projects", headers=auth_headers
         )
         assert response.status_code == 200
-        data = response.json()
+        result = response.json()
+        data = result["data"]
         assert data["uuid"] == account.uuid
         assert "projects" in data
         assert len(data["projects"]) >= 1
@@ -689,7 +734,8 @@ class TestTaskRoutes:
             headers=auth_headers,
         )
         assert response.status_code == 200
-        data = response.json()
+        result = response.json()
+        data = result["data"]
         assert data["uuid"] == project.uuid
         assert "tasks" in data
         assert len(data["tasks"]) >= 1
@@ -702,7 +748,8 @@ class TestTaskRoutes:
             f"/accounts/{account.uuid}?include=non_existent", headers=auth_headers
         )
         assert response.status_code == 200
-        data = response.json()
+        result = response.json()
+        data = result["data"]
         assert data["uuid"] == account.uuid
         assert "non_existent" not in data
 
@@ -710,9 +757,10 @@ class TestTaskRoutes:
         """Test listing tasks."""
         response = client.get("/tasks/", headers=auth_headers)
         assert response.status_code == 200
-        data = response.json()
-        assert len(data["items"]) >= 1
-        assert any(t["uuid"] == task.uuid for t in data["items"])
+        result = response.json()
+        data = result["data"]
+        assert len(data) >= 1
+        assert any(t["uuid"] == task.uuid for t in data)
 
     async def test_list_tasks_with_n_per_page(
         self, client, auth_headers, db_engine, account
@@ -741,50 +789,54 @@ class TestTaskRoutes:
         # Test default n_per_page (25)
         response = client.get("/tasks/", headers=auth_headers)
         assert response.status_code == 200
-        data = response.json()
-        assert len(data["items"]) == 25  # Default page size
-        assert data["total"] == 30
-        assert data["page"] == 1
-        assert data["pages"] == 2  # 30 items / 25 per page = 2 pages
+        result = response.json()
+        data = result["data"]
+        meta = result["meta"]
+        assert len(data) == 25  # Default page size
+        assert meta["total"] == 30
+        assert meta["page"] == 1
+        assert meta["pages"] == 2  # 30 items / 25 per page = 2 pages
 
         # Test custom n_per_page (10)
         response = client.get("/tasks/?n_per_page=10", headers=auth_headers)
         assert response.status_code == 200
-        data = response.json()
-        assert len(data["items"]) == 10
-        assert data["total"] == 30
-        assert data["page"] == 1
-        assert data["pages"] == 3  # 30 items / 10 per page = 3 pages
+        result = response.json()
+        data = result["data"]
+        meta = result["meta"]
+        assert len(data) == 10
+        assert meta["total"] == 30
+        assert meta["page"] == 1
+        assert meta["pages"] == 3  # 30 items / 10 per page = 3 pages
 
         # Test n_per_page exceeding max limit (300)
         response = client.get("/tasks/?n_per_page=300", headers=auth_headers)
         assert response.status_code == 422
-        assert response.json()["detail"][0]["type"] == "less_than_equal"
-        assert response.json()["detail"][0]["loc"] == ["query", "n_per_page"]
-        assert (
-            response.json()["detail"][0]["msg"]
-            == "Input should be less than or equal to 250"
-        )
-        assert response.json()["detail"][0]["input"] == "300"
-        assert response.json()["detail"][0]["ctx"]["le"] == 250
+        result = response.json()
+        assert result["errors"][0]["code"] == "OUT_OF_RANGE"
+        assert result["errors"][0]["field"] == "query.n_per_page"
+        assert "less than or equal to 250" in result["errors"][0]["message"]
 
         # Test pagination with custom n_per_page
         response = client.get("/tasks/?n_per_page=10&page=1", headers=auth_headers)
         assert response.status_code == 200
-        data = response.json()
-        assert len(data["items"]) == 10
-        assert data["total"] == 30
-        assert data["page"] == 1
-        assert data["pages"] == 3
+        result = response.json()
+        data = result["data"]
+        meta = result["meta"]
+        assert len(data) == 10
+        assert meta["total"] == 30
+        assert meta["page"] == 1
+        assert meta["pages"] == 3
 
         # Test last page with custom n_per_page
         response = client.get("/tasks/?n_per_page=10&page=2", headers=auth_headers)
         assert response.status_code == 200
-        data = response.json()
-        assert len(data["items"]) == 10
-        assert data["total"] == 30
-        assert data["page"] == 2
-        assert data["pages"] == 3
+        result = response.json()
+        data = result["data"]
+        meta = result["meta"]
+        assert len(data) == 10
+        assert meta["total"] == 30
+        assert meta["page"] == 2
+        assert meta["pages"] == 3
 
     async def test_list_with_relations(
         self, client, auth_headers, account, project, task
@@ -793,9 +845,10 @@ class TestTaskRoutes:
         # Test listing accounts with projects included
         response = client.get("/accounts/?include=projects", headers=auth_headers)
         assert response.status_code == 200
-        data = response.json()
-        assert len(data["items"]) >= 1
-        account_data = next(a for a in data["items"] if a["uuid"] == account.uuid)
+        result = response.json()
+        data = result["data"]
+        assert len(data) >= 1
+        account_data = next(a for a in data if a["uuid"] == account.uuid)
         assert "projects" in account_data
         assert len(account_data["projects"]) >= 1
         assert any(p["uuid"] == project.uuid for p in account_data["projects"])
@@ -805,9 +858,10 @@ class TestTaskRoutes:
             "/projects/?include=tasks&include=account", headers=auth_headers
         )
         assert response.status_code == 200
-        data = response.json()
-        assert len(data["items"]) >= 1
-        project_data = next(p for p in data["items"] if p["uuid"] == project.uuid)
+        result = response.json()
+        data = result["data"]
+        assert len(data) >= 1
+        project_data = next(p for p in data if p["uuid"] == project.uuid)
         assert "tasks" in project_data
         assert len(project_data["tasks"]) >= 1
         assert any(t["uuid"] == task.uuid for t in project_data["tasks"])
@@ -817,18 +871,20 @@ class TestTaskRoutes:
         # Test listing tasks with multiple relations included
         response = client.get("/tasks/?include=project", headers=auth_headers)
         assert response.status_code == 200
-        data = response.json()
-        assert len(data["items"]) >= 1
-        task_data = next(t for t in data["items"] if t["uuid"] == task.uuid)
+        result = response.json()
+        data = result["data"]
+        assert len(data) >= 1
+        task_data = next(t for t in data if t["uuid"] == task.uuid)
         assert "project" in task_data
         assert task_data["project"]["uuid"] == project.uuid
 
         # Test with non-existent relation
         response = client.get("/accounts/?include=non_existent", headers=auth_headers)
         assert response.status_code == 200
-        data = response.json()
-        assert len(data["items"]) >= 1
-        account_data = next(a for a in data["items"] if a["uuid"] == account.uuid)
+        result = response.json()
+        data = result["data"]
+        assert len(data) >= 1
+        account_data = next(a for a in data if a["uuid"] == account.uuid)
         assert "non_existent" not in account_data
 
     async def test_update_task(self, client, auth_headers, task):
@@ -839,7 +895,8 @@ class TestTaskRoutes:
             json={"description": "Updated description"},
         )
         assert response.status_code == 200
-        data = response.json()
+        result = response.json()
+        data = result["data"]
         assert data["description"] == "Updated description"
         assert data["due_date"] == task.due_date  # Unchanged
 
@@ -847,15 +904,17 @@ class TestTaskRoutes:
         """Test deleting a task."""
         response = client.delete(f"/tasks/{task.uuid}", headers=auth_headers)
         assert response.status_code == 200
-        assert response.json() == {"detail": "Resource soft deleted"}
+        result = response.json()
+        assert result["data"]["message"] == "Resource soft deleted"
 
     async def test_list_deleted_tasks(self, client, auth_headers, deleted_task):
         """Test listing deleted tasks."""
         response = client.get("/tasks/deleted/", headers=auth_headers)
         assert response.status_code == 200
-        data = response.json()
-        assert len(data["items"]) >= 1
-        assert any(t["uuid"] == deleted_task.uuid for t in data["items"])
+        result = response.json()
+        data = result["data"]
+        assert len(data) >= 1
+        assert any(t["uuid"] == deleted_task.uuid for t in data)
 
     async def test_task_with_assignees(self, client, auth_headers, project, account):
         """Test creating and updating tasks with assignees through API routes."""
@@ -886,7 +945,8 @@ class TestTaskRoutes:
             json=task_data,
         )
         assert response.status_code == 201
-        data = response.json()
+        result = response.json()
+        data = result["data"]
         assert data["name"] == "Test Task"
         assert len(data["assignees"]) == 2
         assert data["assignees"][0]["name"] == "John Doe"
@@ -912,7 +972,8 @@ class TestTaskRoutes:
             json=updated_task_data,
         )
         assert response.status_code == 200
-        data = response.json()
+        result = response.json()
+        data = result["data"]
         assert data["name"] == "Updated Task"
         assert len(data["assignees"]) == 1
         assert data["assignees"][0]["name"] == "Bob Wilson"
@@ -929,7 +990,8 @@ class TestTaskRoutes:
             json=empty_assignees_data,
         )
         assert response.status_code == 200
-        data = response.json()
+        result = response.json()
+        data = result["data"]
         assert len(data["assignees"]) == 0
 
     async def test_order_tasks_by_project_name(
@@ -977,11 +1039,10 @@ class TestTaskRoutes:
             "/tasks/?order_by=project.name&include=project", headers=auth_headers
         )
         assert response.status_code == 200
-        data = response.json()
-        assert len(data["items"]) >= 1
-        assert data["items"] == sorted(
-            data["items"], key=lambda x: x["project"]["name"]
-        )
+        result = response.json()
+        data = result["data"]
+        assert len(data) >= 1
+        assert data == sorted(data, key=lambda x: x["project"]["name"])
 
 
 @pytest.mark.asyncio
@@ -992,7 +1053,11 @@ class TestAuthenticationAndErrors:
         """Test that requests without auth header fail."""
         response = client.get("/accounts/")
         assert response.status_code == 401
-        assert response.json()["detail"] == "Missing or invalid Authorization header"
+        result = response.json()
+        assert result["status"]["code"] == 401
+        assert (
+            result["errors"][0]["message"] == "Missing or invalid Authorization header"
+        )
 
     async def test_invalid_auth_token(self, client):
         """Test that requests with invalid auth token fail."""
@@ -1008,7 +1073,9 @@ class TestAuthenticationAndErrors:
             headers=auth_headers,
         )
         assert response.status_code == 404
-        assert response.json()["detail"] == "Resource not found"
+        result = response.json()
+        assert result["status"]["code"] == 404
+        assert result["errors"][0]["message"] == "Resource not found"
 
 
 @pytest.mark.asyncio
@@ -1040,8 +1107,9 @@ class TestOwnership:
         )
         assert response.status_code == 201
         result = response.json()
-        assert result["name"] == "Test Project"
-        assert result["account_id"] == account_claims["account_id"]
+        data = result["data"]
+        assert data["name"] == "Test Project"
+        assert data["account_id"] == account_claims["account_id"]
 
     async def test_create_without_claims(
         self, client, account, auth_headers_no_account_id
@@ -1054,7 +1122,8 @@ class TestOwnership:
             headers=auth_headers_no_account_id,
         )
         assert response.status_code == 403
-        assert "Missing required claim: account_id" in response.json()["detail"]
+        result = response.json()
+        assert "Missing required claim: account_id" in result["errors"][0]["message"]
 
     async def test_create_with_ownership_forbidden(self, client, auth_headers):
         """Test creating a record with incorrect ownership value is forbidden."""
@@ -1068,7 +1137,8 @@ class TestOwnership:
             headers=auth_headers,
         )
         assert response.status_code == 403
-        assert "Invalid account_id" in response.json()["detail"]
+        result = response.json()
+        assert "Invalid account_id" in result["errors"][0]["message"]
 
     async def test_get_with_ownership(self, client, auth_headers, account_claims):
         """Test getting a record owned by the user."""
@@ -1079,7 +1149,7 @@ class TestOwnership:
             json=data,
             headers=auth_headers,
         )
-        project_id = create_response.json()["uuid"]
+        project_id = create_response.json()["data"]["uuid"]
 
         # Then get it
         response = client.get(
@@ -1088,8 +1158,9 @@ class TestOwnership:
         )
         assert response.status_code == 200
         result = response.json()
-        assert result["uuid"] == project_id
-        assert result["account_id"] == account_claims["account_id"]
+        data = result["data"]
+        assert data["uuid"] == project_id
+        assert data["account_id"] == account_claims["account_id"]
 
     async def test_get_without_ownership(
         self,
@@ -1106,7 +1177,7 @@ class TestOwnership:
             json=data,
             headers=auth_headers,
         )
-        project_id = create_response.json()["uuid"]
+        project_id = create_response.json()["data"]["uuid"]
 
         # Try to get it with different account
         response = client.get(
@@ -1149,8 +1220,9 @@ class TestOwnership:
         )
         assert response.status_code == 200
         result = response.json()
-        assert len(result["items"]) == 1
-        assert result["items"][0]["account_id"] == account_claims["account_id"]
+        data = result["data"]
+        assert len(data) == 1
+        assert data[0]["account_id"] == account_claims["account_id"]
 
     async def test_update_with_ownership(
         self,
@@ -1167,7 +1239,7 @@ class TestOwnership:
             json=data,
             headers=auth_headers,
         )
-        project_id = create_response.json()["uuid"]
+        project_id = create_response.json()["data"]["uuid"]
 
         # Update with correct ownership
         response = client.put(
@@ -1176,7 +1248,8 @@ class TestOwnership:
             headers=auth_headers,
         )
         assert response.status_code == 200
-        assert response.json()["name"] == "Updated Project"
+        result = response.json()
+        assert result["data"]["name"] == "Updated Project"
 
         # Try to update with different account
         response = client.put(
@@ -1201,7 +1274,7 @@ class TestOwnership:
             json=data,
             headers=auth_headers,
         )
-        project_id = create_response.json()["uuid"]
+        project_id = create_response.json()["data"]["uuid"]
 
         # Delete with correct ownership
         response = client.delete(
@@ -1316,7 +1389,11 @@ class TestPermissions:
             json={"name": "Test Project", "account_id": account.uuid},
         )
         assert response.status_code == 403
-        assert "Permission denied: project:create required" in response.json()["detail"]
+        result = response.json()
+        assert (
+            "Permission denied: project:create required"
+            in result["errors"][0]["message"]
+        )
 
     async def test_read_with_permission(
         self, client, auth_headers_read_permissions, project
@@ -1335,7 +1412,10 @@ class TestPermissions:
             f"/projects/{project.uuid}", headers=auth_headers_no_permissions
         )
         assert response.status_code == 403
-        assert "Permission denied: project:read required" in response.json()["detail"]
+        result = response.json()
+        assert (
+            "Permission denied: project:read required" in result["errors"][0]["message"]
+        )
 
     async def test_update_with_permission(self, client, auth_headers, project):
         """Test updating a record with proper permission."""
@@ -1356,7 +1436,11 @@ class TestPermissions:
             json={"name": "Updated Project"},
         )
         assert response.status_code == 403
-        assert "Permission denied: project:update required" in response.json()["detail"]
+        result = response.json()
+        assert (
+            "Permission denied: project:update required"
+            in result["errors"][0]["message"]
+        )
 
     async def test_delete_with_permission(self, client, auth_headers, project):
         """Test deleting a record with proper permission."""
@@ -1371,7 +1455,11 @@ class TestPermissions:
             f"/projects/{project.uuid}", headers=auth_headers_read_permissions
         )
         assert response.status_code == 403
-        assert "Permission denied: project:delete required" in response.json()["detail"]
+        result = response.json()
+        assert (
+            "Permission denied: project:delete required"
+            in result["errors"][0]["message"]
+        )
 
     async def test_superuser_role_override(
         self, client, auth_headers_superuser, account, project
@@ -1429,8 +1517,9 @@ class TestPermissions:
             headers=auth_headers,
         )
         assert response.status_code == 200
-        data = response.json()
-        assert len(data["items"]) == 1  # Should return all tasks, ignoring the filters
+        result = response.json()
+        data = result["data"]
+        assert len(data) == 1  # Should return all tasks, ignoring the filters
 
         # Test that allowed fields still work
         response = client.get(
@@ -1438,9 +1527,10 @@ class TestPermissions:
             headers=auth_headers,
         )
         assert response.status_code == 200
-        data = response.json()
-        assert len(data["items"]) == 1
-        assert data["items"][0]["uuid"] == task.uuid
+        result = response.json()
+        data = result["data"]
+        assert len(data) == 1
+        assert data[0]["uuid"] == task.uuid
 
         # Test that non-allowed fields still raise an error
         response = client.get(
@@ -1448,9 +1538,10 @@ class TestPermissions:
             headers=auth_headers,
         )
         assert response.status_code == 400
+        result = response.json()
         assert (
             "Invalid query field: due_date. Allowed fields: ['account_id', 'project_id', 'status']"
-            in response.json()["detail"]
+            in result["errors"][0]["message"]
         )
 
 
@@ -1499,8 +1590,9 @@ class TestDateRangeFiltering:
             headers=auth_headers,
         )
         assert response.status_code == 200
-        data = response.json()
-        assert len(data["items"]) == 3
+        result = response.json()
+        data = result["data"]
+        assert len(data) == 3
 
         # Test date range that includes only past and present
         response = client.get(
@@ -1508,10 +1600,11 @@ class TestDateRangeFiltering:
             headers=auth_headers,
         )
         assert response.status_code == 200
-        data = response.json()
-        assert len(data["items"]) == 2
-        assert any(p["name"] == "Project Past" for p in data["items"])
-        assert any(p["name"] == "Project Present" for p in data["items"])
+        result = response.json()
+        data = result["data"]
+        assert len(data) == 2
+        assert any(p["name"] == "Project Past" for p in data)
+        assert any(p["name"] == "Project Present" for p in data)
 
         # Test date range that includes only future
         response = client.get(
@@ -1519,9 +1612,10 @@ class TestDateRangeFiltering:
             headers=auth_headers,
         )
         assert response.status_code == 200
-        data = response.json()
-        assert len(data["items"]) == 1
-        assert data["items"][0]["name"] == "Project Future"
+        result = response.json()
+        data = result["data"]
+        assert len(data) == 1
+        assert data[0]["name"] == "Project Future"
 
         # Test invalid date format
         response = client.get(
@@ -1529,8 +1623,9 @@ class TestDateRangeFiltering:
             headers=auth_headers,
         )
         assert response.status_code == 200  # Should still work but return no results
-        data = response.json()
-        assert len(data["items"]) == 0
+        result = response.json()
+        data = result["data"]
+        assert len(data) == 0
 
     async def test_date_comparison_operators(
         self, client, auth_headers, db_engine, account
@@ -1575,9 +1670,10 @@ class TestDateRangeFiltering:
             headers=auth_headers,
         )
         assert response.status_code == 200
-        data = response.json()
-        assert len(data["items"]) >= 2
-        project_names = [p["name"] for p in data["items"]]
+        result = response.json()
+        data = result["data"]
+        assert len(data) >= 2
+        project_names = [p["name"] for p in data]
         assert "Project Present" in project_names
         assert "Project Future" in project_names
 
@@ -1587,9 +1683,10 @@ class TestDateRangeFiltering:
             headers=auth_headers,
         )
         assert response.status_code == 200
-        data = response.json()
-        assert len(data["items"]) >= 2
-        project_names = [p["name"] for p in data["items"]]
+        result = response.json()
+        data = result["data"]
+        assert len(data) >= 2
+        project_names = [p["name"] for p in data]
         assert "Project Past" in project_names
         assert "Project Present" in project_names
 
@@ -1599,9 +1696,10 @@ class TestDateRangeFiltering:
             headers=auth_headers,
         )
         assert response.status_code == 200
-        data = response.json()
-        assert len(data["items"]) >= 2
-        project_names = [p["name"] for p in data["items"]]
+        result = response.json()
+        data = result["data"]
+        assert len(data) >= 2
+        project_names = [p["name"] for p in data]
         assert "Project Present" in project_names
         assert "Project Future" in project_names
 
@@ -1611,10 +1709,11 @@ class TestDateRangeFiltering:
             headers=auth_headers,
         )
         assert response.status_code == 200
-        data = response.json()
+        result = response.json()
+        data = result["data"]
         # Note: This might return fewer results due to time precision
-        assert len(data["items"]) >= 1
-        project_names = [p["name"] for p in data["items"]]
+        assert len(data) >= 1
+        project_names = [p["name"] for p in data]
         # At least one of these should be present
         assert any(
             name in project_names for name in ["Project Past", "Project Present"]
@@ -1650,9 +1749,10 @@ class TestDateRangeFiltering:
             headers=auth_headers,
         )
         assert response.status_code == 200
-        data = response.json()
-        assert len(data["items"]) >= 1
-        project_names = [p["name"] for p in data["items"]]
+        result = response.json()
+        data = result["data"]
+        assert len(data) >= 1
+        project_names = [p["name"] for p in data]
         assert "Project Specific Date" in project_names
 
         # Test exact date match for different date
@@ -1661,9 +1761,10 @@ class TestDateRangeFiltering:
             headers=auth_headers,
         )
         assert response.status_code == 200
-        data = response.json()
-        assert len(data["items"]) >= 1
-        project_names = [p["name"] for p in data["items"]]
+        result = response.json()
+        data = result["data"]
+        assert len(data) >= 1
+        project_names = [p["name"] for p in data]
         assert "Project Different Date" in project_names
 
     async def test_date_comparison_with_datetime(
@@ -1699,9 +1800,10 @@ class TestDateRangeFiltering:
             headers=auth_headers,
         )
         assert response.status_code == 200
-        data = response.json()
-        assert len(data["items"]) >= 1
-        project_names = [p["name"] for p in data["items"]]
+        result = response.json()
+        data = result["data"]
+        assert len(data) >= 1
+        project_names = [p["name"] for p in data]
         assert "Project After" in project_names
 
         # Test lt with datetime - should return project before
@@ -1710,9 +1812,10 @@ class TestDateRangeFiltering:
             headers=auth_headers,
         )
         assert response.status_code == 200
-        data = response.json()
-        assert len(data["items"]) >= 1
-        project_names = [p["name"] for p in data["items"]]
+        result = response.json()
+        data = result["data"]
+        assert len(data) >= 1
+        project_names = [p["name"] for p in data]
         assert "Project Before" in project_names
 
     async def test_mixed_date_and_string_queries(
@@ -1746,9 +1849,10 @@ class TestDateRangeFiltering:
             headers=auth_headers,
         )
         assert response.status_code == 200
-        data = response.json()
-        assert len(data["items"]) == 1
-        assert data["items"][0]["name"] == "Project 2023-06-15"
+        result = response.json()
+        data = result["data"]
+        assert len(data) == 1
+        assert data[0]["name"] == "Project 2023-06-15"
 
         # Test that date queries work on date fields with exact date match
         response = client.get(
@@ -1756,8 +1860,9 @@ class TestDateRangeFiltering:
             headers=auth_headers,
         )
         assert response.status_code == 200
-        data = response.json()
-        assert len(data["items"]) >= 2  # Both projects have the same date
+        result = response.json()
+        data = result["data"]
+        assert len(data) >= 2  # Both projects have the same date
 
     async def test_invalid_date_formats(self, client, auth_headers, db_engine, account):
         """Test handling of invalid date formats."""
@@ -1777,8 +1882,9 @@ class TestDateRangeFiltering:
             headers=auth_headers,
         )
         assert response.status_code == 200  # Should not crash, just return no results
-        data = response.json()
-        assert len(data["items"]) == 0
+        result = response.json()
+        data = result["data"]
+        assert len(data) == 0
 
         # Test invalid date format in exact match
         response = client.get(
@@ -1786,8 +1892,9 @@ class TestDateRangeFiltering:
             headers=auth_headers,
         )
         assert response.status_code == 200  # Should not crash, just return no results
-        data = response.json()
-        assert len(data["items"]) == 0
+        result = response.json()
+        data = result["data"]
+        assert len(data) == 0
 
         # Test malformed date - this should be handled gracefully
         response = client.get(
@@ -1796,5 +1903,6 @@ class TestDateRangeFiltering:
         )
         # The malformed date should be treated as a string and not crash
         assert response.status_code == 200
-        data = response.json()
-        assert len(data["items"]) == 0
+        result = response.json()
+        data = result["data"]
+        assert len(data) == 0

@@ -6,6 +6,7 @@ from fastapi import HTTPException
 from odmantic import AIOEngine, EmbeddedModel, Model
 from pydantic import BaseModel
 
+from fastapi_sdk.utils.constants import ErrorCode
 from fastapi_sdk.utils.schema import datetime_now_sec
 
 
@@ -82,7 +83,10 @@ class ModelController:
         if not claim_value and not self.ownership_rule.allow_public:
             raise HTTPException(
                 status_code=403,
-                detail=f"Missing required claim: {self.ownership_rule.claim_field}",
+                detail={
+                    "code": ErrorCode.MISSING_CLAIM.value,
+                    "message": f"Missing required claim: {self.ownership_rule.claim_field}",
+                },
             )
 
         if not claim_value:
@@ -132,7 +136,10 @@ class ModelController:
                 # User is trying to access something they don't own
                 raise HTTPException(
                     status_code=403,
-                    detail=f"Access denied: {ownership_field} not in your allowed values",
+                    detail={
+                        "code": ErrorCode.ACCESS_DENIED.value,
+                        "message": f"Access denied: {ownership_field} not in your allowed values",
+                    },
                 )
         else:
             # Ownership is an array ($in operator)
@@ -209,7 +216,10 @@ class ModelController:
             ):
                 raise HTTPException(
                     status_code=403,
-                    detail="Claims must be provided when ownership rule is set and allow_public is False",
+                    detail={
+                        "code": ErrorCode.CLAIMS_REQUIRED.value,
+                        "message": "Claims must be provided when ownership rule is set and allow_public is False",
+                    },
                 )
             if claims:
                 ownership_filter = self._get_ownership_filter(claims)
@@ -224,14 +234,20 @@ class ModelController:
                         if model_field_value not in claim_value:
                             raise HTTPException(
                                 status_code=403,
-                                detail=f"Invalid {self.ownership_rule.model_field}",
+                                detail={
+                                    "code": ErrorCode.INVALID_OWNERSHIP.value,
+                                    "message": f"Invalid {self.ownership_rule.model_field}",
+                                },
                             )
                     else:
                         # If claim is a single value, check direct equality
                         if model_field_value != claim_value:
                             raise HTTPException(
                                 status_code=403,
-                                detail=f"Invalid {self.ownership_rule.model_field}",
+                                detail={
+                                    "code": ErrorCode.INVALID_OWNERSHIP.value,
+                                    "message": f"Invalid {self.ownership_rule.model_field}",
+                                },
                             )
 
     async def create(
@@ -382,7 +398,10 @@ class ModelController:
             if not self.ownership_rule.allow_public and not claims:
                 raise HTTPException(
                     status_code=403,
-                    detail="Claims must be provided when ownership rule is set and allow_public is False",
+                    detail={
+                        "code": ErrorCode.CLAIMS_REQUIRED.value,
+                        "message": "Claims must be provided when ownership rule is set and allow_public is False",
+                    },
                 )
             if claims:
                 ownership_filter = self._get_ownership_filter(claims)
@@ -509,7 +528,10 @@ class ModelController:
             if not self.ownership_rule.allow_public and not claims:
                 raise HTTPException(
                     status_code=403,
-                    detail="Claims must be provided when ownership rule is set and allow_public is False",
+                    detail={
+                        "code": ErrorCode.CLAIMS_REQUIRED.value,
+                        "message": "Claims must be provided when ownership rule is set and allow_public is False",
+                    },
                 )
             if claims:
                 ownership_filter = self._get_ownership_filter(claims)
@@ -659,7 +681,10 @@ class ModelController:
             if not self.ownership_rule.allow_public and not claims:
                 raise HTTPException(
                     status_code=403,
-                    detail="Claims must be provided when ownership rule is set and allow_public is False",
+                    detail={
+                        "code": ErrorCode.CLAIMS_REQUIRED.value,
+                        "message": "Claims must be provided when ownership rule is set and allow_public is False",
+                    },
                 )
             if claims:
                 ownership_filter = self._get_ownership_filter(claims)

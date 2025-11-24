@@ -15,8 +15,10 @@ from fastapi_sdk.security.permissions import (
     require_combined_permission,
     require_permission,
 )
+from fastapi_sdk.utils.constants import ErrorCode
+from fastapi_sdk.utils.dependencies import get_request_id
 from fastapi_sdk.utils.model import convert_model_name
-from fastapi_sdk.utils.schema import BaseResponsePaginated
+from fastapi_sdk.utils.response import create_success_response
 
 
 class RouteController:
@@ -51,7 +53,6 @@ class RouteController:
         controller: Type[ModelController],
         get_db: Callable,
         schema_response: Type[BaseModel],
-        schema_response_paginated: Type[BaseResponsePaginated],
         schema_create: Optional[Type[BaseModel]] = None,
         schema_update: Optional[Type[BaseModel]] = None,
         include_routes: Optional[List[str]] = None,
@@ -68,8 +69,7 @@ class RouteController:
             tags: List of tags for API documentation
             controller: The ModelController class to use
             get_db: Database dependency function
-            schema_response: Pydantic model for response
-            schema_response_paginated: Pydantic model for paginated response
+            schema_response: Pydantic model for response (used for single items and list items)
             schema_create: Optional Pydantic model for creation
             schema_update: Optional Pydantic model for updates
             include_routes: Optional list of routes to include (defaults to all)
@@ -85,7 +85,6 @@ class RouteController:
         self.controller = controller
         self.get_db = get_db
         self.schema_response = schema_response
-        self.schema_response_paginated = schema_response_paginated
         self.schema_create = schema_create
         self.schema_update = schema_update
         self.include_routes = include_routes or [
@@ -149,30 +148,37 @@ class RouteController:
     def _add_create_route(self) -> None:
         """Add create route."""
 
-        @self.router.post("/", response_model=self.schema_response, status_code=201)
+        @self.router.post("/", status_code=201)
         @self._get_permission_decorator("create")
         async def create_route(
             request: Request,
             data: self.schema_create,  # type: ignore
             db: Any = Depends(self.get_db),
+            request_id: str = Depends(get_request_id),
         ):
             """Create a new resource (requires authentication)."""
             instance = await self.controller(db).create(
                 data.model_dump(),
                 claims=request.state.claims,
             )
-            return self.schema_response(**instance.model_dump())
+            response_data = self.schema_response(**instance.model_dump())
+            return create_success_response(
+                data=response_data.model_dump(),
+                status_code=201,
+                request_id=request_id,
+            )
 
     def _add_get_route(self) -> None:
         """Add get by ID route."""
 
-        @self.router.get("/{resource_id}", response_model=self.schema_response)
+        @self.router.get("/{resource_id}")
         @self._get_permission_decorator("read")
         async def get_route(
             request: Request,
             resource_id: str,
             include: List[str] = Query(default=None),
             db: Any = Depends(self.get_db),
+            request_id: str = Depends(get_request_id),
         ):
             """Get a resource by ID (requires authentication).
 
@@ -181,6 +187,7 @@ class RouteController:
                 resource_id: The ID of the resource to get
                 include: Optional list of related objects to include in the response
                 db: The database connection
+                request_id: Request ID for tracing (injected by FastAPI)
 
             Example:
                 # Get an account with its projects included
@@ -204,13 +211,24 @@ class RouteController:
                     claims=request.state.claims,
                 )
             if not instance:
-                raise HTTPException(status_code=404, detail="Resource not found")
-            return self.schema_response(**instance.model_dump())
+                raise HTTPException(
+                    status_code=404,
+                    detail={
+                        "code": ErrorCode.NOT_FOUND.value,
+                        "message": "Resource not found",
+                    },
+                )
+            response_data = self.schema_response(**instance.model_dump())
+            return create_success_response(
+                data=response_data.model_dump(),
+                status_code=200,
+                request_id=request_id,
+            )
 
     def _add_list_route(self) -> None:
         """Add list route."""
 
-        @self.router.get("/", response_model=self.schema_response_paginated)
+        @self.router.get("/")
         @self._get_permission_decorator("read")
         async def list_route(
             request: Request,
@@ -234,6 +252,7 @@ class RouteController:
                 description="Number of items per page (max 250)",
             ),
             db: Any = Depends(self.get_db),
+            request_id: str = Depends(get_request_id),
         ):
             """List all resources (requires authentication).
 
@@ -285,7 +304,10 @@ class RouteController:
                     if field not in self.allowed_order_fields:
                         raise HTTPException(
                             status_code=400,
-                            detail=f"Invalid order_by field: {field}. Allowed fields: {self.allowed_order_fields}",
+                            detail={
+                                "code": ErrorCode.INVALID_ORDER_FIELD.value,
+                                "message": f"Invalid order_by field: {field}. Allowed fields: {self.allowed_order_fields}",
+                            },
                         )
 
                 # Parse order_direction
@@ -300,7 +322,10 @@ class RouteController:
                     if len(order_directions) != len(order_fields):
                         raise HTTPException(
                             status_code=400,
-                            detail=f"Number of order directions ({len(order_directions)}) must match number of order fields ({len(order_fields)})",
+                            detail={
+                                "code": ErrorCode.INVALID_ORDER_DIRECTION_COUNT.value,
+                                "message": f"Number of order directions ({len(order_directions)}) must match number of order fields ({len(order_fields)})",
+                            },
                         )
 
                     # Create order_by_dict with individual directions for each field
@@ -309,7 +334,10 @@ class RouteController:
                         if direction_str not in ["asc", "desc"]:
                             raise HTTPException(
                                 status_code=400,
-                                detail=f"Invalid order direction: {direction_str}. Must be 'asc' or 'desc'",
+                                detail={
+                                    "code": ErrorCode.INVALID_ORDER_DIRECTION.value,
+                                    "message": f"Invalid order direction: {direction_str}. Must be 'asc' or 'desc'",
+                                },
                             )
                         direction = 1 if direction_str == "asc" else -1
                         order_by_dict[field] = direction
@@ -335,7 +363,10 @@ class RouteController:
                 if field not in self.allowed_query_fields:
                     raise HTTPException(
                         status_code=400,
-                        detail=f"Invalid query field: {field}. Allowed fields: {self.allowed_query_fields}",
+                        detail={
+                            "code": ErrorCode.INVALID_QUERY_FIELD.value,
+                            "message": f"Invalid query field: {field}. Allowed fields: {self.allowed_query_fields}",
+                        },
                     )
 
                 # Handle different value types
@@ -412,7 +443,10 @@ class RouteController:
                         else:
                             raise HTTPException(
                                 status_code=400,
-                                detail=f"Invalid comparison operator: {operator}. Allowed operators: gt, lt, gte, lte",
+                                detail={
+                                    "code": ErrorCode.INVALID_COMPARISON_OPERATOR.value,
+                                    "message": f"Invalid comparison operator: {operator}. Allowed operators: gt, lt, gte, lte",
+                                },
                             )
                     # Handle exact match (default)
                     else:
@@ -435,18 +469,34 @@ class RouteController:
                 include=include,
                 n_per_page=n_per_page,
             )
-            return instances
+            # Convert items to dict format
+            items = [
+                self.schema_response(**item.model_dump()).model_dump()
+                for item in instances["items"]
+            ]
+            return create_success_response(
+                data=items,
+                status_code=200,
+                meta={
+                    "total": instances["total"],
+                    "page": instances["page"],
+                    "pages": instances["pages"],
+                    "size": instances["size"],
+                },
+                request_id=request_id,
+            )
 
     def _add_update_route(self) -> None:
         """Add update route."""
 
-        @self.router.put("/{resource_id}", response_model=self.schema_response)
+        @self.router.put("/{resource_id}")
         @self._get_permission_decorator("update")
         async def update_route(
             request: Request,
             resource_id: str,
             data: self.schema_update,  # type: ignore
             db: Any = Depends(self.get_db),
+            request_id: str = Depends(get_request_id),
         ):
             """Update a resource (requires authentication)."""
             instance = await self.controller(db).update(
@@ -455,8 +505,19 @@ class RouteController:
                 claims=request.state.claims,
             )
             if not instance:
-                raise HTTPException(status_code=404, detail="Resource not found")
-            return self.schema_response(**instance.model_dump())
+                raise HTTPException(
+                    status_code=404,
+                    detail={
+                        "code": ErrorCode.NOT_FOUND.value,
+                        "message": "Resource not found",
+                    },
+                )
+            response_data = self.schema_response(**instance.model_dump())
+            return create_success_response(
+                data=response_data.model_dump(),
+                status_code=200,
+                request_id=request_id,
+            )
 
     def _add_delete_route(self) -> None:
         """Add delete route."""
@@ -467,30 +528,57 @@ class RouteController:
             request: Request,
             resource_id: str,
             db: Any = Depends(self.get_db),
+            request_id: str = Depends(get_request_id),
         ):
             """Soft delete a resource (requires authentication)."""
             if not await self.controller(db).delete(
                 uuid=resource_id,
                 claims=request.state.claims,
             ):
-                raise HTTPException(status_code=404, detail="Resource not found")
-            return {"detail": "Resource soft deleted"}
+                raise HTTPException(
+                    status_code=404,
+                    detail={
+                        "code": ErrorCode.NOT_FOUND.value,
+                        "message": "Resource not found",
+                    },
+                )
+            return create_success_response(
+                data={"message": "Resource soft deleted"},
+                status_code=200,
+                request_id=request_id,
+            )
 
     def _add_list_deleted_route(self) -> None:
         """Add list deleted route."""
 
-        @self.router.get("/deleted/", response_model=self.schema_response_paginated)
+        @self.router.get("/deleted/")
         @self._get_permission_decorator("read")
         async def list_deleted_route(
             request: Request,
             db: Any = Depends(self.get_db),
+            request_id: str = Depends(get_request_id),
         ):
             """List all deleted resources (requires authentication)."""
             instances = await self.controller(db).list(
                 query=[{"deleted": True}],
                 claims=request.state.claims,
             )
-            return instances
+            # Convert items to dict format
+            items = [
+                self.schema_response(**item.model_dump()).model_dump()
+                for item in instances["items"]
+            ]
+            return create_success_response(
+                data=items,
+                status_code=200,
+                meta={
+                    "total": instances["total"],
+                    "page": instances["page"],
+                    "pages": instances["pages"],
+                    "size": instances["size"],
+                },
+                request_id=request_id,
+            )
 
     def _get_query_filters(self, request: Request) -> List[dict]:
         """Get the query filters from the request.
@@ -521,7 +609,10 @@ class RouteController:
             if field not in self.allowed_query_fields:
                 raise HTTPException(
                     status_code=400,
-                    detail=f"Field {field} is not allowed in query parameters",
+                    detail={
+                        "code": ErrorCode.INVALID_QUERY_FIELD.value,
+                        "message": f"Field {field} is not allowed in query parameters",
+                    },
                 )
 
             # Add the filter

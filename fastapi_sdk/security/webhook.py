@@ -7,6 +7,8 @@ import re
 from fastapi import HTTPException
 from starlette.status import HTTP_400_BAD_REQUEST
 
+from fastapi_sdk.utils.constants import ErrorCode
+
 
 def generate_signature(secret: str, payload: bytes) -> str:
     """Generate a signature for the payload"""
@@ -36,7 +38,11 @@ def verify_signature(secret: str, payload: bytes, signature: str) -> bool:
             return verify_single_signature(secret, payload, signature)
     except Exception as e:
         raise HTTPException(
-            status_code=HTTP_400_BAD_REQUEST, detail=f"Invalid signature: {e}"
+            status_code=HTTP_400_BAD_REQUEST,
+            detail={
+                "code": ErrorCode.INVALID_SIGNATURE.value,
+                "message": f"Invalid signature: {e}",
+            },
         ) from e
 
 
@@ -51,14 +57,20 @@ def verify_single_signature(secret: str, payload: bytes, signature: str) -> bool
         if len(signature) != 64:
             raise HTTPException(
                 status_code=HTTP_400_BAD_REQUEST,
-                detail=f"Invalid signature length: expected 64 characters, got {len(signature)}",
+                detail={
+                    "code": ErrorCode.INVALID_SIGNATURE_LENGTH.value,
+                    "message": f"Invalid signature length: expected 64 characters, got {len(signature)}",
+                },
             )
 
         # Check if signature contains only valid hex characters
         if not re.match(r"^[0-9a-f]{64}$", signature):
             raise HTTPException(
                 status_code=HTTP_400_BAD_REQUEST,
-                detail="Invalid signature: must contain only hexadecimal characters (0-9, a-f)",
+                detail={
+                    "code": ErrorCode.INVALID_SIGNATURE_FORMAT.value,
+                    "message": "Invalid signature: must contain only hexadecimal characters (0-9, a-f)",
+                },
             )
 
         computed = hmac.new(
@@ -67,7 +79,11 @@ def verify_single_signature(secret: str, payload: bytes, signature: str) -> bool
         return hmac.compare_digest(computed, signature)
     except Exception as e:
         raise HTTPException(
-            status_code=HTTP_400_BAD_REQUEST, detail=f"Invalid signature: {e}"
+            status_code=HTTP_400_BAD_REQUEST,
+            detail={
+                "code": ErrorCode.INVALID_SIGNATURE.value,
+                "message": f"Invalid signature: {e}",
+            },
         ) from e
 
 
@@ -102,7 +118,11 @@ def verify_revolut_signature(
             )
     except Exception as e:
         raise HTTPException(
-            status_code=HTTP_400_BAD_REQUEST, detail=f"Invalid Revolut signature: {e}"
+            status_code=HTTP_400_BAD_REQUEST,
+            detail={
+                "code": ErrorCode.INVALID_REVOLUT_SIGNATURE.value,
+                "message": f"Invalid Revolut signature: {e}",
+            },
         ) from e
 
 
