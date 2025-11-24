@@ -52,8 +52,25 @@ jobs:
       - name: Sync dependencies (locked if available)
         run: uv sync --frozen
 
-      # Run your test suite (pytest as example)
-      # ✅ Run tests with DB env available
+      # Generate test keys if they don't exist (needed for JWT token testing)
+      - name: Generate test keys
+        run: |
+          if [ ! -f test_private_key.pem ] || [ ! -f test_public_key.pem ]; then
+            echo "Generating test keys..."
+            # Generate encrypted private key (with password, but we'll remove it)
+            openssl genrsa -out test_private_encrypted.pem 2048
+            # Extract public key
+            openssl rsa -pubout -in test_private_encrypted.pem -out test_public_key.pem
+            # Extract unencrypted private key
+            openssl rsa -in test_private_encrypted.pem -out test_private_key.pem -outform PEM
+            # Clean up encrypted key
+            rm test_private_encrypted.pem
+            echo "Test keys generated successfully"
+          else
+            echo "Test keys already exist, skipping generation"
+          fi
+
+      # Load .env.test if it exists and run tests
       - name: Run tests
         env:
           MONGODB_URI: ${{ env.MONGODB_URI }}
