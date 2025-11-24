@@ -14,7 +14,12 @@ class Settings(BaseSettings):
         "MONGO_DATABASE_URI", "mongodb://localhost:27017"
     )
     MONGO_DATABASE_NAME: str = os.environ.get("MONGO_DATABASE_NAME", "test_fastapi_sdk")
-    PUBLIC_ROUTES: list[str] = json.loads(os.environ.get("PUBLIC_ROUTES", "[]"))
+    PUBLIC_ROUTES: list[str] = json.loads(
+        os.environ.get(
+            "PUBLIC_ROUTES",
+            '["/public", "/docs", "/openapi.json", "/webhook", "/revolut-webhook"]',
+        )
+    )
     TEST_PRIVATE_KEY_PATH: str = os.environ.get(
         "TEST_PRIVATE_KEY_PATH", "tests/test_private_key.pem"
     )
@@ -25,7 +30,7 @@ class Settings(BaseSettings):
     AUTH_CLIENT_ID: str = os.environ.get("AUTH_CLIENT_ID", "test_client_id")
     WEBHOOK_SECRET: str = os.environ.get(
         "WEBHOOK_SECRET",
-        "b1a9b6521cfbec5ddd81e71676c12ac4d7478ee0fa9078a9632e0654380cd9e2",
+        "test_webhook_secret",
     )
     WEBHOOK_MAX_AGE_SECONDS: int = 300
 
