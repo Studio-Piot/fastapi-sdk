@@ -11,6 +11,9 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse
 
 from fastapi_sdk.security.oauth import decode_access_token
+from fastapi_sdk.utils.constants import ErrorCode
+from fastapi_sdk.utils.dependencies import get_request_id
+from fastapi_sdk.utils.response import create_error_response, create_single_error
 
 
 class AuthMiddleware(BaseHTTPMiddleware):
@@ -71,10 +74,18 @@ class AuthMiddleware(BaseHTTPMiddleware):
 
         auth_header = request.headers.get("Authorization")
         if not auth_header or not auth_header.startswith("Bearer "):
-            return JSONResponse(
+            request_id = get_request_id(request)
+            response = create_error_response(
+                errors=[
+                    create_single_error(
+                        code=ErrorCode.MISSING_AUTH_HEADER,
+                        message="Missing or invalid Authorization header",
+                    )
+                ],
                 status_code=401,
-                content={"detail": "Missing or invalid Authorization header"},
+                request_id=request_id,
             )
+            return JSONResponse(status_code=401, content=response)
 
         token = auth_header.split(" ")[1]  # Extract token
 
@@ -88,6 +99,14 @@ class AuthMiddleware(BaseHTTPMiddleware):
             )
             request.state.claims = payload  # Attach user info to request state
         except ValueError as e:
-            return JSONResponse(status_code=401, content={"detail": str(e)})
+            request_id = get_request_id(request)
+            response = create_error_response(
+                errors=[
+                    create_single_error(code=ErrorCode.INVALID_TOKEN, message=str(e))
+                ],
+                status_code=401,
+                request_id=request_id,
+            )
+            return JSONResponse(status_code=401, content=response)
 
         return await call_next(request)

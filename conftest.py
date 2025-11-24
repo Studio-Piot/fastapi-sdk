@@ -1,5 +1,6 @@
 """Pytest configuration file for the tests."""
 
+import os
 from datetime import UTC, datetime, timedelta
 from typing import AsyncGenerator, Generator
 
@@ -15,6 +16,9 @@ from tests.config import settings
 from tests.db import get_db_engine
 from tests.models import AccountModel, ProjectModel, TaskModel
 
+MONGO_URI = os.getenv("MONGODB_URI", "mongodb://localhost:27017")
+DB_NAME = os.getenv("MONGODB_DB", "test_notifications")
+
 
 @pytest.fixture
 def client() -> Generator:
@@ -26,8 +30,8 @@ def client() -> Generator:
 @pytest_asyncio.fixture
 async def db_engine() -> AsyncGenerator:
     """Create a new MongoDB connection to be used as dependency."""
-    db_client = AsyncIOMotorClient("mongodb://localhost:27017")
-    _db_engine = AIOEngine(client=db_client, database="fastapi_sdk_test")
+    db_client = AsyncIOMotorClient(MONGO_URI)
+    _db_engine = AIOEngine(client=db_client, database=DB_NAME)
 
     try:
         yield _db_engine
@@ -39,8 +43,8 @@ def override_get_db_engine():
     """
     This function is used to override the get_db function in the db.session module.
     """
-    db_client = AsyncIOMotorClient("mongodb://localhost:27017")
-    _db_engine = AIOEngine(client=db_client, database="fastapi_sdk_test")
+    db_client = AsyncIOMotorClient(MONGO_URI)
+    _db_engine = AIOEngine(client=db_client, database=DB_NAME)
     try:
         yield _db_engine
     finally:

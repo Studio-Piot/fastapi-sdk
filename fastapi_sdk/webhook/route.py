@@ -5,10 +5,13 @@ import logging
 import time
 from typing import Callable, Optional
 
-from fastapi import APIRouter, Header, HTTPException, Request
+from fastapi import APIRouter, Depends, Header, HTTPException, Request
 from starlette.status import HTTP_400_BAD_REQUEST, HTTP_403_FORBIDDEN
 
 from fastapi_sdk.security.webhook import verify_signature
+from fastapi_sdk.utils.constants import ErrorCode
+from fastapi_sdk.utils.dependencies import get_request_id
+from fastapi_sdk.utils.response import create_success_response
 from fastapi_sdk.webhook.handler import registry
 
 # Configure logger
@@ -48,6 +51,7 @@ def create_webhook_router(
         request: Request,
         x_signature: str = Header(..., alias=signature_header),
         x_timestamp: str = Header(..., alias=timestamp_header),
+        request_id: str = Depends(get_request_id),
     ):
         """Webhook endpoint"""
         try:
@@ -62,7 +66,11 @@ def create_webhook_router(
                 },
             )
             raise HTTPException(
-                status_code=HTTP_400_BAD_REQUEST, detail=f"Invalid timestamp: {e}"
+                status_code=HTTP_400_BAD_REQUEST,
+                detail={
+                    "code": ErrorCode.INVALID_TIMESTAMP.value,
+                    "message": f"Invalid timestamp: {e}",
+                },
             ) from e
 
         # Auto-detect timestamp format: seconds vs milliseconds
@@ -103,7 +111,11 @@ def create_webhook_router(
                 },
             )
             raise HTTPException(
-                status_code=HTTP_403_FORBIDDEN, detail="Request expired"
+                status_code=HTTP_403_FORBIDDEN,
+                detail={
+                    "code": ErrorCode.REQUEST_EXPIRED.value,
+                    "message": "Request expired",
+                },
             )
 
         # Parse and process payload
@@ -119,7 +131,10 @@ def create_webhook_router(
             )
             raise HTTPException(
                 status_code=HTTP_400_BAD_REQUEST,
-                detail=f"Invalid JSON payload: {e}",
+                detail={
+                    "code": ErrorCode.INVALID_JSON.value,
+                    "message": f"Invalid JSON payload: {e}",
+                },
             ) from e
 
         # Use custom signature verification if provided, otherwise use default
@@ -137,7 +152,11 @@ def create_webhook_router(
                     },
                 )
                 raise HTTPException(
-                    status_code=HTTP_403_FORBIDDEN, detail="Invalid signature"
+                    status_code=HTTP_403_FORBIDDEN,
+                    detail={
+                        "code": ErrorCode.INVALID_SIGNATURE.value,
+                        "message": "Invalid signature",
+                    },
                 )
         else:
             # Use standard signature verification
@@ -151,7 +170,11 @@ def create_webhook_router(
                     },
                 )
                 raise HTTPException(
-                    status_code=HTTP_403_FORBIDDEN, detail="Invalid signature"
+                    status_code=HTTP_403_FORBIDDEN,
+                    detail={
+                        "code": ErrorCode.INVALID_SIGNATURE.value,
+                        "message": "Invalid signature",
+                    },
                 )
 
         event = payload.get("event")
@@ -165,7 +188,11 @@ def create_webhook_router(
                 },
             )
             raise HTTPException(
-                status_code=HTTP_400_BAD_REQUEST, detail="Missing event in payload"
+                status_code=HTTP_400_BAD_REQUEST,
+                detail={
+                    "code": ErrorCode.MISSING_EVENT.value,
+                    "message": "Missing event in payload",
+                },
             )
 
         try:
@@ -177,7 +204,20 @@ def create_webhook_router(
                     "payload": payload,
                 },
             )
-            return result
+            # Format webhook handler result according to standard format
+            # If result is already a dict with status/result, wrap it properly
+            if isinstance(result, dict) and "status" in result and "result" in result:
+                return create_success_response(
+                    data=result,
+                    status_code=200,
+                    request_id=request_id,
+                )
+            # Otherwise, wrap the result in data
+            return create_success_response(
+                data=result if isinstance(result, dict) else {"result": result},
+                status_code=200,
+                request_id=request_id,
+            )
         except ValueError as e:
             logger.error(
                 "Failed to process webhook event",
@@ -188,6 +228,12 @@ def create_webhook_router(
                     "headers": dict(request.headers),
                 },
             )
-            raise HTTPException(status_code=HTTP_400_BAD_REQUEST, detail=str(e)) from e
+            raise HTTPException(
+                status_code=HTTP_400_BAD_REQUEST,
+                detail={
+                    "code": ErrorCode.WEBHOOK_HANDLER_ERROR.value,
+                    "message": str(e),
+                },
+            ) from e
 
     return router

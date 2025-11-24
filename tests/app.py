@@ -7,6 +7,7 @@ from fastapi import FastAPI
 from fastapi_sdk.controllers import ModelController
 from fastapi_sdk.middleware.auth import AuthMiddleware
 from fastapi_sdk.security.webhook import verify_revolut_signature
+from fastapi_sdk.utils.exception_handler import register_exception_handlers
 from fastapi_sdk.webhook.handler import registry
 from fastapi_sdk.webhook.route import create_webhook_router
 from tests.config import settings
@@ -77,6 +78,9 @@ app = FastAPI(
     summary="",
     lifespan=lifespan,
 )
+
+# Register exception handlers for standardized response format
+register_exception_handlers(app)
 
 # Add auth middleware
 app.add_middleware(

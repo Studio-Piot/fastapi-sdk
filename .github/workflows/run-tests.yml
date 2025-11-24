@@ -1,0 +1,74 @@
+name: Tests (uv)
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+    branches: ["**"]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    # 🧩 Start MongoDB for tests
+    services:
+      mongo:
+        image: mongo:7
+        ports:
+          - 27017:27017
+        options: >-
+          --health-cmd "mongosh --eval 'db.adminCommand(\"ping\")'"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    # Make URI/DB easy to override (repo → Settings → Secrets/Variables)
+    env:
+      MONGODB_URI: ${{ vars.MONGODB_URI || secrets.MONGODB_URI || 'mongodb://localhost:27017' }}
+      MONGODB_DB: ${{ vars.MONGODB_DB  || secrets.MONGODB_DB  || 'test_fastapi_sdk' }}
+
+    strategy:
+      matrix:
+        python-version: ["3.13"]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Install the requested Python version (fast on GH runners)
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      # Install uv and enable cache keyed on pyproject/uv.lock, etc.
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+          python-version: ${{ matrix.python-version }}
+
+      # Install project deps into .venv using lockfile if present
+      - name: Sync dependencies (locked if available)
+        run: uv sync --frozen
+
+      # Run your test suite (pytest as example)
+      # ✅ Run tests with DB env available
+      - name: Run tests
+        env:
+          MONGODB_URI: ${{ env.MONGODB_URI }}
+          MONGODB_DB: ${{ env.MONGODB_DB }}
+        run: uv run pytest -q
+
+  ci: # <- single gate you will require in branch protection
+    needs: [test]
+    runs-on: ubuntu-latest
+    if: ${{ always() }}
+    steps:
+      - name: Fail if any prior job failed
+        run: |
+          if [[ "${{ needs.test.result }}" != "success" ]]; then
+            echo "One or more matrix runs failed."
+            exit 1
+          fi
+          echo "All tests passed."
