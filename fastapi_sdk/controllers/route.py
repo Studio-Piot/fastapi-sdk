@@ -11,7 +11,10 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel
 
 from fastapi_sdk.controllers import ModelController
-from fastapi_sdk.security.permissions import require_permission
+from fastapi_sdk.security.permissions import (
+    require_combined_permission,
+    require_permission,
+)
 from fastapi_sdk.utils.model import convert_model_name
 from fastapi_sdk.utils.schema import BaseResponsePaginated
 
@@ -55,6 +58,8 @@ class RouteController:
         allowed_query_fields: Optional[List[str]] = None,
         allowed_order_fields: Optional[List[str]] = None,
         ignored_query_fields: Optional[List[str]] = None,
+        custom_permission_func: Optional[Callable[[Request, dict], bool]] = None,
+        custom_permission_error_message: str = "Permission denied",
     ):
         """Initialize the route controller.
 
@@ -72,6 +77,8 @@ class RouteController:
             allowed_query_fields: Optional list of fields that can be used in query parameters
             allowed_order_fields: Optional list of fields that can be used for ordering
             ignored_query_fields: Optional list of fields that should be ignored in query parameters
+            custom_permission_func: Optional custom permission function that takes (request, resource_data) and returns bool
+            custom_permission_error_message: Custom error message for permission denied (default: "Permission denied")
         """
         self.prefix = prefix
         self.tags = tags
@@ -92,12 +99,32 @@ class RouteController:
         self.allowed_query_fields = allowed_query_fields or []
         self.allowed_order_fields = allowed_order_fields or []
         self.ignored_query_fields = ignored_query_fields or []
+        self.custom_permission_func = custom_permission_func
+        self.custom_permission_error_message = custom_permission_error_message
 
         # Get model name from controller and convert it
         self.model_name = convert_model_name(controller.model.__name__)
 
         self.router = APIRouter(prefix=prefix, tags=tags)
         self._setup_routes()
+
+    def _get_permission_decorator(self, action: str):
+        """Get the appropriate permission decorator based on configuration.
+
+        Args:
+            action: The action being performed (create, read, update, delete)
+
+        Returns:
+            The appropriate permission decorator
+        """
+        if self.custom_permission_func is not None:
+            return require_combined_permission(
+                permission=f"{self.model_name}:{action}",
+                custom_permission_func=self.custom_permission_func,
+                custom_permission_error_message=self.custom_permission_error_message,
+            )
+        else:
+            return require_permission(f"{self.model_name}:{action}")
 
     def _setup_routes(self) -> None:
         """Set up all the CRUD routes based on include_routes."""
@@ -123,7 +150,7 @@ class RouteController:
         """Add create route."""
 
         @self.router.post("/", response_model=self.schema_response, status_code=201)
-        @require_permission(f"{self.model_name}:create")
+        @self._get_permission_decorator("create")
         async def create_route(
             request: Request,
             data: self.schema_create,  # type: ignore
@@ -140,7 +167,7 @@ class RouteController:
         """Add get by ID route."""
 
         @self.router.get("/{resource_id}", response_model=self.schema_response)
-        @require_permission(f"{self.model_name}:read")
+        @self._get_permission_decorator("read")
         async def get_route(
             request: Request,
             resource_id: str,
@@ -184,7 +211,7 @@ class RouteController:
         """Add list route."""
 
         @self.router.get("/", response_model=self.schema_response_paginated)
-        @require_permission(f"{self.model_name}:read")
+        @self._get_permission_decorator("read")
         async def list_route(
             request: Request,
             page: int = Query(default=1, ge=1, description="Page number (1-based)"),
@@ -414,7 +441,7 @@ class RouteController:
         """Add update route."""
 
         @self.router.put("/{resource_id}", response_model=self.schema_response)
-        @require_permission(f"{self.model_name}:update")
+        @self._get_permission_decorator("update")
         async def update_route(
             request: Request,
             resource_id: str,
@@ -435,7 +462,7 @@ class RouteController:
         """Add delete route."""
 
         @self.router.delete("/{resource_id}")
-        @require_permission(f"{self.model_name}:delete")
+        @self._get_permission_decorator("delete")
         async def delete_route(
             request: Request,
             resource_id: str,
@@ -453,7 +480,7 @@ class RouteController:
         """Add list deleted route."""
 
         @self.router.get("/deleted/", response_model=self.schema_response_paginated)
-        @require_permission(f"{self.model_name}:read")
+        @self._get_permission_decorator("read")
         async def list_deleted_route(
             request: Request,
             db: Any = Depends(self.get_db),
