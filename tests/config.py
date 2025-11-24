@@ -23,7 +23,10 @@ class Settings(BaseSettings):
     )
     AUTH_ISSUER: str = os.environ.get("AUTH_ISSUER", "https://auth.fauthy.com")
     AUTH_CLIENT_ID: str = os.environ.get("AUTH_CLIENT_ID", "test_client_id")
-    WEBHOOK_SECRET: str = os.environ.get("WEBHOOK_SECRET", "test_webhook_secret")
+    WEBHOOK_SECRET: str = os.environ.get(
+        "WEBHOOK_SECRET",
+        "b1a9b6521cfbec5ddd81e71676c12ac4d7478ee0fa9078a9632e0654380cd9e2",
+    )
     WEBHOOK_MAX_AGE_SECONDS: int = 300
 
 
