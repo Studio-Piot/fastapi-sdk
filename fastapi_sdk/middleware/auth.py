@@ -27,6 +27,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
         auth_issuer: str,
         auth_client_id: str,
         env: str,
+        jwk_url: str,
         test_private_key_path: Optional[str] = None,
         test_public_key_path: Optional[str] = None,
     ):
@@ -38,6 +39,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
             auth_issuer: The issuer of the JWT tokens
             auth_client_id: The client ID for authentication
             env: The environment (e.g., "test", "prod")
+            jwk_url: URL to fetch JWK from. Required for all environments.
             test_private_key_path: Path to private key for test environment
             test_public_key_path: Path to public key for test environment
         """
@@ -48,6 +50,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
         self.env = env
         self.test_private_key_path = test_private_key_path
         self.test_public_key_path = test_public_key_path
+        self.jwk_url = jwk_url
 
         # Compile regex patterns for public routes
         self.public_route_patterns = []
@@ -96,6 +99,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
                 auth_client_id=self.auth_client_id,
                 env=self.env,
                 test_public_key_path=self.test_public_key_path,
+                jwk_url=self.jwk_url,
             )
             request.state.claims = payload  # Attach user info to request state
         except ValueError as e:

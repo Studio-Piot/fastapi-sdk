@@ -89,6 +89,7 @@ app.add_middleware(
     auth_issuer=settings.AUTH_ISSUER,  # Your authentication server URL
     auth_client_id=settings.AUTH_CLIENT_ID,  # Your client ID for authentication
     env=settings.ENVIRONMENT,  # Environment: "development" or "production"
+    jwk_url=settings.JWK_URL,  # URL to fetch JWK from
     test_private_key_path=settings.TEST_PRIVATE_KEY_PATH,  # Path to private key for development
     test_public_key_path=settings.TEST_PUBLIC_KEY_PATH,
 )

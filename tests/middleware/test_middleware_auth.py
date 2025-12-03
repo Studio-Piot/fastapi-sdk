@@ -28,6 +28,7 @@ def auth_middleware(app):
         auth_issuer=settings.AUTH_ISSUER,
         auth_client_id=settings.AUTH_CLIENT_ID,
         env=settings.ENVIRONMENT,
+        jwk_url=settings.JWK_URL,
         test_private_key_path=settings.TEST_PRIVATE_KEY_PATH,
         test_public_key_path=settings.TEST_PUBLIC_KEY_PATH,
     )

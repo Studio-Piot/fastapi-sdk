@@ -28,6 +28,9 @@ class Settings(BaseSettings):
     )
     AUTH_ISSUER: str = os.environ.get("AUTH_ISSUER", "https://auth.fauthy.com")
     AUTH_CLIENT_ID: str = os.environ.get("AUTH_CLIENT_ID", "test_client_id")
+    JWK_URL: str = os.environ.get(
+        "JWK_URL", "https://api-v2.fauthy.com/jwk?client_id=test_client_id"
+    )
     WEBHOOK_SECRET: str = os.environ.get(
         "WEBHOOK_SECRET",
         "test_webhook_secret",

@@ -22,18 +22,21 @@ jwt = JsonWebToken(["RS256"])
 
 
 @lru_cache()
-def cached_jwk_response(auth_issuer: str, auth_client_id: str):
+def cached_jwk_response(jwk_url: str):
     """Cache JWK in memory"""
-    return get_jwk(auth_issuer, auth_client_id)
+    return get_jwk(jwk_url)
 
 
-def get_jwk(auth_issuer: str, auth_client_id: str):
+def get_jwk(jwk_url: str):
     """
-    Get the JWKS from the JWKS_URL environment variable.
+    Get the JWKS from the provided jwk_url.
     This is extracted as a single function to make it easier to mock in tests.
+
+    Args:
+        jwk_url: URL to fetch JWK from.
     """
     response = requests.get(
-        f"{auth_issuer}/auth/jwk?client_id={auth_client_id}",
+        jwk_url,
         timeout=10,
     )
     response.raise_for_status()
@@ -47,6 +50,7 @@ def decode_access_token(
     auth_issuer: str,
     auth_client_id: str,
     env: str,
+    jwk_url: str,
     test_public_key_path: Optional[str] = None,
 ) -> dict:
     """Decode and validate a JWT token using the public key.
@@ -56,6 +60,7 @@ def decode_access_token(
         auth_issuer: The issuer of the JWT tokens
         auth_client_id: The client ID for authentication
         env: The environment (e.g., "test", "prod")
+        jwk_url: URL to fetch JWK from. Required for all environments.
         test_public_key_path: Path to public key for test environment
 
     Returns:
@@ -71,7 +76,7 @@ def decode_access_token(
             claims = jwt.decode(token, test_public_key)
         else:
             # Get the JWKS from the issuer
-            jwk = cached_jwk_response(auth_issuer, auth_client_id)
+            jwk = cached_jwk_response(jwk_url)
             claims = jwt.decode(token, jwk)
 
         # Validate expiration and other standard claims
