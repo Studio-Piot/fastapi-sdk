@@ -3,11 +3,10 @@
 from typing import Any, Dict, List, Optional, Type
 
 from fastapi import HTTPException
-from odmantic import AIOEngine, EmbeddedModel, Model
-from pydantic import BaseModel
-
 from fastapi_sdk.utils.constants import ErrorCode
 from fastapi_sdk.utils.schema import datetime_now_sec
+from odmantic import AIOEngine, EmbeddedModel, Model
+from pydantic import BaseModel
 
 
 class OwnershipRule:
