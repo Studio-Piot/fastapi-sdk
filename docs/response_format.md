@@ -84,7 +84,7 @@ Example (returning a User object)
     "message": "OK"
   },
   "data": {
-    "user_id": "abc123",
+    "uuid": "usr_abc123",
     "email": "user@example.com",
     "name": "Jane Doe",
     "created_at": "2025-11-24T10:15:00Z"
@@ -93,6 +93,48 @@ Example (returning a User object)
   "meta": {
     "timestamp": "2025-11-24T10:30:00Z",
     "request_id": "req-789"
+  }
+}
+```
+
+### 200 OK — Success Response with Pagination
+
+Example (returning a list of Users with pagination metadata)
+
+```json
+{
+  "status": {
+    "code": 200,
+    "message": "OK"
+  },
+  "data": [
+    {
+      "uuid": "usr_abc123",
+      "email": "user1@example.com",
+      "name": "Jane Doe",
+      "created_at": "2025-11-24T10:15:00Z"
+    },
+    {
+      "uuid": "usr_def456",
+      "email": "user2@example.com",
+      "name": "John Smith",
+      "created_at": "2025-11-24T10:16:00Z"
+    },
+    {
+      "uuid": "usr_ghi789",
+      "email": "user3@example.com",
+      "name": "Alice Johnson",
+      "created_at": "2025-11-24T10:17:00Z"
+    }
+  ],
+  "errors": null,
+  "meta": {
+    "timestamp": "2025-11-24T10:30:00Z",
+    "request_id": "req-789",
+    "total": 47,
+    "page": 1,
+    "pages": 5,
+    "size": 10
   }
 }
 ```
