@@ -10,7 +10,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import JSONResponse
 
-from fastapi_sdk.security.oauth import decode_access_token
+from fastapi_sdk.security.oauth import TokenError, decode_access_token
 from fastapi_sdk.utils.constants import ErrorCode
 from fastapi_sdk.utils.dependencies import get_request_id
 from fastapi_sdk.utils.response import create_error_response, create_single_error
@@ -102,12 +102,10 @@ class AuthMiddleware(BaseHTTPMiddleware):
                 jwk_url=self.jwk_url,
             )
             request.state.claims = payload  # Attach user info to request state
-        except ValueError as e:
+        except TokenError as e:
             request_id = get_request_id(request)
             response = create_error_response(
-                errors=[
-                    create_single_error(code=ErrorCode.INVALID_TOKEN, message=str(e))
-                ],
+                errors=[create_single_error(code=e.error_code, message=e.message)],
                 status_code=401,
                 request_id=request_id,
             )

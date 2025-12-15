@@ -158,7 +158,7 @@ def test_protected_route_with_malformed_header(app, auth_middleware):
 
 
 def test_protected_route_with_expired_token(app, auth_middleware):
-    """Test that protected routes return 401 with an expired token."""
+    """Test that protected routes return 401 with TOKEN_EXPIRED error code for expired tokens."""
 
     @app.get("/protected")
     async def protected_route():
@@ -182,6 +182,11 @@ def test_protected_route_with_expired_token(app, auth_middleware):
         headers={"Authorization": f"Bearer {expired_token}"},
     )
     assert response.status_code == 401
+    response_data = response.json()
+    assert response_data["status"]["code"] == 401
+    assert response_data["status"]["message"] == "Unauthorized"
+    assert response_data["errors"][0]["code"] == ErrorCode.TOKEN_EXPIRED.value
+    assert "Token has expired" in response_data["errors"][0]["message"]
 
 
 def test_protected_route_with_wrong_issuer(app, auth_middleware):
@@ -211,15 +216,12 @@ def test_protected_route_with_wrong_issuer(app, auth_middleware):
     response_data = response.json()
     assert response_data["status"]["code"] == 401
     assert response_data["status"]["message"] == "Unauthorized"
-    assert response_data["errors"][0]["code"] == ErrorCode.INVALID_TOKEN.value
-    assert (
-        response_data["errors"][0]["message"]
-        == "Token verification failed: Token issuer does not match auth_issuer"
-    )
+    assert response_data["errors"][0]["code"] == ErrorCode.TOKEN_INVALID_CLAIM.value
+    assert "Invalid token claim" in response_data["errors"][0]["message"]
 
 
 def test_protected_route_with_wrong_client_id(app, auth_middleware):
-    """Test that protected routes return 401 with a token for wrong client ID."""
+    """Test that protected routes return 401 with TOKEN_VERIFICATION_FAILED error code for wrong client ID."""
 
     @app.get("/protected")
     async def protected_route():
@@ -242,3 +244,48 @@ def test_protected_route_with_wrong_client_id(app, auth_middleware):
         headers={"Authorization": f"Bearer {wrong_client_token}"},
     )
     assert response.status_code == 401
+    response_data = response.json()
+    assert response_data["status"]["code"] == 401
+    assert response_data["status"]["message"] == "Unauthorized"
+    assert (
+        response_data["errors"][0]["code"] == ErrorCode.TOKEN_VERIFICATION_FAILED.value
+    )
+    assert (
+        "Token tenant_id does not match auth_client_id"
+        in response_data["errors"][0]["message"]
+    )
+
+
+def test_protected_route_with_invalid_signature(app, auth_middleware):
+    """Test that protected routes return 401 with TOKEN_INVALID_SIGNATURE error code for invalid signatures."""
+
+    @app.get("/protected")
+    async def protected_route():
+        return {"detail": "protected"}
+
+    # Create a valid token first
+    token = create_access_token(
+        test_private_key_path=settings.TEST_PRIVATE_KEY_PATH,
+        data={
+            "sub": "test-user",
+            "account_id": "test-account",
+            "iss": settings.AUTH_ISSUER,
+            "tenant_id": settings.AUTH_CLIENT_ID,
+        },
+    )
+
+    # Corrupt the signature by modifying the last part of the token
+    parts = token.split(".")
+    corrupted_token = f"{parts[0]}.{parts[1]}.{parts[2][:-5]}XXXXX"
+
+    client = TestClient(app)
+    response = client.get(
+        "/protected",
+        headers={"Authorization": f"Bearer {corrupted_token}"},
+    )
+    assert response.status_code == 401
+    response_data = response.json()
+    assert response_data["status"]["code"] == 401
+    assert response_data["status"]["message"] == "Unauthorized"
+    assert response_data["errors"][0]["code"] == ErrorCode.TOKEN_INVALID_SIGNATURE.value
+    assert "Invalid token signature" in response_data["errors"][0]["message"]
