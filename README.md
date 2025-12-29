@@ -77,7 +77,7 @@ For the API to work in the real world, you will need settings for Fauthy authent
 
 ```bash
 # .env.local
-export AUTH_ISSUER="https://identity.piot.co.uk"
+export AUTH_ISSUER="https://fauthy.com"
 export AUTH_CLIENT_ID="test_client_id" # Replace with real client_id for production
 ```
 
@@ -94,7 +94,7 @@ A full `.env.local` complete included the MongoDB connection string:
 ```bash
 export AUTH_PRIVATE_KEY="test_private_key.pem"
 export AUTH_PUBLIC_KEY="test_public_key.pem"
-export AUTH_ISSUER="https://identity.piot.co.uk"
+export AUTH_ISSUER="https://fauthy.com"
 export AUTH_CLIENT_ID="test_client_id" # Replace with real client_id for production
 export PUBLIC_ROUTES="/public/*,/other"
 export ENVIRONMENT="development" # Replace with production when deploying to live server
