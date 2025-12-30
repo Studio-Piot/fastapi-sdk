@@ -55,12 +55,6 @@ class AccountResponse(AccountBase):
     model_config = ConfigDict(from_attributes=True)
 
 
-class AccountResponsePaginated(BaseResponsePaginated):
-    """Schema for paginatedAPI responses"""
-
-    items: List[AccountResponse]
-
-
 ###########
 # Project #
 ###########
@@ -100,12 +94,6 @@ class ProjectResponse(ProjectBase):
     account: Optional["AccountResponse"] = Field(default=None)
     status: Optional[ProjectStatusOptions] = Field(default=None)
     model_config = ConfigDict(from_attributes=True)
-
-
-class ProjectResponsePaginated(BaseResponsePaginated):
-    """Schema for paginated API responses"""
-
-    items: List[ProjectResponse]
 
 
 ###########
@@ -151,9 +139,3 @@ class TaskResponse(TaskBase):
     project: Optional["ProjectResponse"] = Field(default=None)
 
     model_config = ConfigDict(from_attributes=True)
-
-
-class TaskResponsePaginated(BaseResponsePaginated):
-    """Schema for paginated API responses"""
-
-    items: List[TaskResponse]
