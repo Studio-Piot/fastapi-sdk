@@ -94,6 +94,7 @@ def create_error_response(
     status_code: int = 400,
     request_id: Optional[str] = None,
     meta: Optional[Dict[str, Any]] = None,
+    data: Optional[Any] = None,
 ) -> Dict[str, Any]:
     """Create a standardized error response.
 
@@ -102,6 +103,7 @@ def create_error_response(
         status_code: HTTP status code (default: 400)
         request_id: Optional request ID for tracing
         meta: Optional metadata to include
+        data: Optional data to include (e.g., original payload for validation errors)
 
     Returns:
         Formatted error response dictionary
@@ -139,7 +141,7 @@ def create_error_response(
             "code": status_code,
             "message": get_status_message(status_code),
         },
-        "data": None,
+        "data": data,
         "errors": [error.model_dump() for error in error_list],
         "meta": response_meta,
     }

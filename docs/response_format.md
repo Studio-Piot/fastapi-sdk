@@ -28,7 +28,7 @@ Define a global format, as pure JSON Schema object, of how all response should b
       "additionalProperties": false
     },
     "data": {
-      "description": "Main payload on success; null or omitted on error",
+      "description": "Main payload on success; null on most errors; may contain original submitted data on validation errors (422)",
       "type": ["object", "array", "null"],
       "additionalProperties": true
     },
@@ -168,6 +168,42 @@ Example (missing or invalid fields)
   }
 }
 ```
+
+### ⚠️ 422 Unprocessable Entity — Validation Error
+
+Example (Pydantic validation errors with original payload)
+
+```json
+{
+  "status": {
+    "code": 422,
+    "message": "Unprocessable Entity"
+  },
+  "data": {
+    "email": "invalid-email",
+    "name": "John Doe",
+    "age": "not-a-number"
+  },
+  "errors": [
+    {
+      "field": "email",
+      "code": "INVALID_FORMAT",
+      "message": "value is not a valid email address"
+    },
+    {
+      "field": "age",
+      "code": "INVALID_TYPE",
+      "message": "value is not a valid integer"
+    }
+  ],
+  "meta": {
+    "timestamp": "2025-11-24T10:31:30Z",
+    "request_id": "req-792"
+  }
+}
+```
+
+**Note:** For validation errors (422), the `data` field contains the original payload that was submitted, making it easier to debug and provide user feedback.
 
 ### 💥 500 Internal Server Error — Unexpected Failure
 

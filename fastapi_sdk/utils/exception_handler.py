@@ -121,10 +121,16 @@ async def validation_exception_handler(
             )
         )
 
+    # Extract the original request body to include in the error response
+    original_body = None
+    if hasattr(exc, "body"):
+        original_body = exc.body
+
     response = create_error_response(
         errors=errors,
         status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
         request_id=request_id,
+        data=original_body,
     )
     return JSONResponse(
         status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, content=response
