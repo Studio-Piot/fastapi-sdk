@@ -136,9 +136,7 @@ async def validation_exception_handler(
         request_id=request_id,
         data=original_body,
     )
-    return JSONResponse(
-        status_code=HTTP_422_UNPROCESSABLE_CONTENT, content=response
-    )
+    return JSONResponse(status_code=HTTP_422_UNPROCESSABLE_CONTENT, content=response)
 
 
 async def starlette_exception_handler(
