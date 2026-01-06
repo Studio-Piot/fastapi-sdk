@@ -1,6 +1,6 @@
 """Exception handlers for FastAPI to format responses consistently."""
 
-from fastapi import FastAPI, HTTPException, Request, status
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
@@ -8,6 +8,10 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from fastapi_sdk.utils.constants import ErrorCode
 from fastapi_sdk.utils.dependencies import get_request_id
 from fastapi_sdk.utils.response import create_error_response, create_single_error
+
+# Define the new constant to avoid deprecation warning
+# HTTP_422_UNPROCESSABLE_ENTITY is deprecated in favor of HTTP_422_UNPROCESSABLE_CONTENT
+HTTP_422_UNPROCESSABLE_CONTENT = 422
 
 
 async def http_exception_handler(request: Request, exc: HTTPException) -> JSONResponse:
@@ -128,12 +132,12 @@ async def validation_exception_handler(
 
     response = create_error_response(
         errors=errors,
-        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+        status_code=HTTP_422_UNPROCESSABLE_CONTENT,
         request_id=request_id,
         data=original_body,
     )
     return JSONResponse(
-        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, content=response
+        status_code=HTTP_422_UNPROCESSABLE_CONTENT, content=response
     )
 
 
