@@ -98,7 +98,7 @@ async def validation_exception_handler(
         # Map Pydantic error types to error codes
         error_type = error.get("type", "")
         code = ErrorCode.VALIDATION_ERROR
-        if error_type == "value_error.missing":
+        if error_type == "missing":
             code = ErrorCode.MISSING_REQUIRED
         elif error_type == "type_error":
             code = ErrorCode.INVALID_TYPE

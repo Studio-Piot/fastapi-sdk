@@ -101,6 +101,12 @@ class EncryptionKeyMixin:
             >>> isinstance(encrypted, str)
             True
         """
+        if not secret_key:
+            raise ValueError("Secret key is required")
+
+        if not encryption_key:
+            raise ValueError("Encryption key is required")
+
         if len(encryption_key) < 32:
             raise ValueError("Encryption key must be at least 32 bytes long")
 
@@ -141,6 +147,16 @@ class EncryptionKeyMixin:
             ... )
             False
         """
+
+        if not provided_key:
+            raise ValueError("Provided key is required")
+
+        if not encrypted_key:
+            raise ValueError("Encrypted key is required")
+
+        if not encryption_key:
+            raise ValueError("Encryption key is required")
+
         if len(encryption_key) < 32:
             return False
 
@@ -183,6 +199,13 @@ class EncryptionKeyMixin:
             >>> decrypted == secret
             True
         """
+
+        if not encrypted_key:
+            raise ValueError("Encrypted key is required")
+
+        if not encryption_key:
+            raise ValueError("Encryption key is required")
+
         if len(encryption_key) < 32:
             raise ValueError("Encryption key must be at least 32 bytes long")
 

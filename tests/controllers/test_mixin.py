@@ -59,12 +59,29 @@ class TestEncryptSecretKey:
         # Fernet uses random IV, so results should be different
         assert encrypted1 != encrypted2
 
-    def test_encrypt_secret_key_with_empty_string(self):
-        """Test encrypting an empty string."""
-        secret = ""
-        encrypted = EncryptionKeyMixin.encrypt_secret_key(secret, TEST_ENCRYPTION_KEY)
-        assert isinstance(encrypted, str)
-        assert len(encrypted) > 0
+    def test_encrypt_secret_key_with_empty_secret(self):
+        """Test that encryption fails with empty secret key."""
+        with pytest.raises(ValueError) as exc_info:
+            EncryptionKeyMixin.encrypt_secret_key("", TEST_ENCRYPTION_KEY)
+        assert "Secret key is required" in str(exc_info.value)
+
+    def test_encrypt_secret_key_with_none_secret(self):
+        """Test that encryption fails with None secret key."""
+        with pytest.raises(ValueError) as exc_info:
+            EncryptionKeyMixin.encrypt_secret_key(None, TEST_ENCRYPTION_KEY)
+        assert "Secret key is required" in str(exc_info.value)
+
+    def test_encrypt_secret_key_with_empty_encryption_key(self):
+        """Test that encryption fails with empty encryption key."""
+        with pytest.raises(ValueError) as exc_info:
+            EncryptionKeyMixin.encrypt_secret_key("my-secret", "")
+        assert "Encryption key is required" in str(exc_info.value)
+
+    def test_encrypt_secret_key_with_none_encryption_key(self):
+        """Test that encryption fails with None encryption key."""
+        with pytest.raises(ValueError) as exc_info:
+            EncryptionKeyMixin.encrypt_secret_key("my-secret", None)
+        assert "Encryption key is required" in str(exc_info.value)
 
     def test_encrypt_secret_key_with_unicode(self):
         """Test encrypting a string with unicode characters."""
@@ -138,13 +155,51 @@ class TestValidateSecretKey:
         )
         assert is_valid is False
 
-    def test_validate_secret_key_empty_encrypted(self):
-        """Test validation with empty encrypted key."""
+    def test_validate_secret_key_with_empty_provided_key(self):
+        """Test that validation fails with empty provided key."""
         secret = "my-secret-key"
-        is_valid = EncryptionKeyMixin.validate_secret_key(
-            secret, "", TEST_ENCRYPTION_KEY
-        )
-        assert is_valid is False
+        encrypted = EncryptionKeyMixin.encrypt_secret_key(secret, TEST_ENCRYPTION_KEY)
+        with pytest.raises(ValueError) as exc_info:
+            EncryptionKeyMixin.validate_secret_key("", encrypted, TEST_ENCRYPTION_KEY)
+        assert "Provided key is required" in str(exc_info.value)
+
+    def test_validate_secret_key_with_none_provided_key(self):
+        """Test that validation fails with None provided key."""
+        secret = "my-secret-key"
+        encrypted = EncryptionKeyMixin.encrypt_secret_key(secret, TEST_ENCRYPTION_KEY)
+        with pytest.raises(ValueError) as exc_info:
+            EncryptionKeyMixin.validate_secret_key(None, encrypted, TEST_ENCRYPTION_KEY)
+        assert "Provided key is required" in str(exc_info.value)
+
+    def test_validate_secret_key_with_empty_encrypted_key(self):
+        """Test that validation fails with empty encrypted key."""
+        secret = "my-secret-key"
+        with pytest.raises(ValueError) as exc_info:
+            EncryptionKeyMixin.validate_secret_key(secret, "", TEST_ENCRYPTION_KEY)
+        assert "Encrypted key is required" in str(exc_info.value)
+
+    def test_validate_secret_key_with_none_encrypted_key(self):
+        """Test that validation fails with None encrypted key."""
+        secret = "my-secret-key"
+        with pytest.raises(ValueError) as exc_info:
+            EncryptionKeyMixin.validate_secret_key(secret, None, TEST_ENCRYPTION_KEY)
+        assert "Encrypted key is required" in str(exc_info.value)
+
+    def test_validate_secret_key_with_empty_encryption_key(self):
+        """Test that validation fails with empty encryption key."""
+        secret = "my-secret-key"
+        encrypted = EncryptionKeyMixin.encrypt_secret_key(secret, TEST_ENCRYPTION_KEY)
+        with pytest.raises(ValueError) as exc_info:
+            EncryptionKeyMixin.validate_secret_key(secret, encrypted, "")
+        assert "Encryption key is required" in str(exc_info.value)
+
+    def test_validate_secret_key_with_none_encryption_key(self):
+        """Test that validation fails with None encryption key."""
+        secret = "my-secret-key"
+        encrypted = EncryptionKeyMixin.encrypt_secret_key(secret, TEST_ENCRYPTION_KEY)
+        with pytest.raises(ValueError) as exc_info:
+            EncryptionKeyMixin.validate_secret_key(secret, encrypted, None)
+        assert "Encryption key is required" in str(exc_info.value)
 
     def test_validate_secret_key_random_encrypted(self):
         """Test validation with random encrypted key."""
@@ -210,14 +265,33 @@ class TestDecryptSecretKey:
         )
         assert decrypted == secret
 
-    def test_decrypt_secret_key_with_empty_string(self):
-        """Test decrypting an empty string."""
-        secret = ""
+    def test_decrypt_secret_key_with_empty_encrypted_key(self):
+        """Test that decryption fails with empty encrypted key."""
+        with pytest.raises(ValueError) as exc_info:
+            EncryptionKeyMixin.decrypt_secret_key("", TEST_ENCRYPTION_KEY)
+        assert "Encrypted key is required" in str(exc_info.value)
+
+    def test_decrypt_secret_key_with_none_encrypted_key(self):
+        """Test that decryption fails with None encrypted key."""
+        with pytest.raises(ValueError) as exc_info:
+            EncryptionKeyMixin.decrypt_secret_key(None, TEST_ENCRYPTION_KEY)
+        assert "Encrypted key is required" in str(exc_info.value)
+
+    def test_decrypt_secret_key_with_empty_encryption_key(self):
+        """Test that decryption fails with empty encryption key."""
+        secret = "my-secret-key"
         encrypted = EncryptionKeyMixin.encrypt_secret_key(secret, TEST_ENCRYPTION_KEY)
-        decrypted = EncryptionKeyMixin.decrypt_secret_key(
-            encrypted, TEST_ENCRYPTION_KEY
-        )
-        assert decrypted == secret
+        with pytest.raises(ValueError) as exc_info:
+            EncryptionKeyMixin.decrypt_secret_key(encrypted, "")
+        assert "Encryption key is required" in str(exc_info.value)
+
+    def test_decrypt_secret_key_with_none_encryption_key(self):
+        """Test that decryption fails with None encryption key."""
+        secret = "my-secret-key"
+        encrypted = EncryptionKeyMixin.encrypt_secret_key(secret, TEST_ENCRYPTION_KEY)
+        with pytest.raises(ValueError) as exc_info:
+            EncryptionKeyMixin.decrypt_secret_key(encrypted, None)
+        assert "Encryption key is required" in str(exc_info.value)
 
     def test_decrypt_secret_key_with_unicode(self):
         """Test decrypting a string with unicode characters."""
@@ -245,11 +319,6 @@ class TestDecryptSecretKey:
         corrupted = encrypted[:-10] + "corrupted!"
         with pytest.raises(InvalidToken):
             EncryptionKeyMixin.decrypt_secret_key(corrupted, TEST_ENCRYPTION_KEY)
-
-    def test_decrypt_secret_key_empty_encrypted(self):
-        """Test decryption with empty encrypted key."""
-        with pytest.raises(InvalidToken):
-            EncryptionKeyMixin.decrypt_secret_key("", TEST_ENCRYPTION_KEY)
 
     def test_decrypt_secret_key_random_encrypted(self):
         """Test decryption with random encrypted key."""
