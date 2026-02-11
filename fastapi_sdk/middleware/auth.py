@@ -8,7 +8,7 @@ from typing import List, Optional
 
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
-from starlette.responses import JSONResponse
+from starlette.responses import JSONResponse, Response
 
 from fastapi_sdk.security.oauth import TokenError, decode_access_token
 from fastapi_sdk.utils.constants import ErrorCode
@@ -69,6 +69,19 @@ class AuthMiddleware(BaseHTTPMiddleware):
         Returns:
             The response from the next handler or an error response
         """
+        # OPTIONS (CORS preflight) must be allowed without auth and return CORS headers
+        if request.method == "OPTIONS":
+            origin = request.headers.get("origin", "*")
+            return Response(
+                status_code=204,
+                headers={
+                    "Access-Control-Allow-Origin": origin,
+                    "Access-Control-Allow-Methods": "GET, POST, PUT, PATCH, DELETE, OPTIONS",
+                    "Access-Control-Allow-Headers": "Authorization, Content-Type, Accept",
+                    "Access-Control-Max-Age": "86400",
+                },
+            )
+
         # Check if the path matches any public route pattern
         path = request.url.path
         for pattern in self.public_route_patterns:

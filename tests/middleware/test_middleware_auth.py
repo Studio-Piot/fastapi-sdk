@@ -82,6 +82,31 @@ def test_public_route_with_wildcard(app, auth_middleware):
     assert response.json() == {"detail": "public users"}
 
 
+def test_options_returns_cors_headers_without_auth(app, auth_middleware):
+    """Test that OPTIONS (CORS preflight) is allowed without auth and returns CORS headers."""
+
+    @app.get("/protected")
+    async def protected_route():
+        return {"detail": "protected"}
+
+    client = TestClient(app)
+    response = client.options(
+        "/protected",
+        headers={"Origin": "https://example.com"},
+    )
+    assert response.status_code == 204
+    assert response.headers["access-control-allow-origin"] == "https://example.com"
+    assert (
+        "GET, POST, PUT, PATCH, DELETE, OPTIONS"
+        in response.headers["access-control-allow-methods"]
+    )
+    assert (
+        "Authorization, Content-Type, Accept"
+        in response.headers["access-control-allow-headers"]
+    )
+    assert response.headers["access-control-max-age"] == "86400"
+
+
 def test_protected_route_with_valid_token(app, auth_middleware, test_token):
     """Test that protected routes are accessible with a valid token."""
 
