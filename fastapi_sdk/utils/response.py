@@ -16,6 +16,13 @@ class ErrorDetail(BaseModel):
     message: str
 
 
+class ResponseStatus(BaseModel):
+    """HTTP status block included in every standard response."""
+
+    code: int
+    message: str
+
+
 DataT = TypeVar("DataT")
 
 
@@ -26,7 +33,7 @@ class StandardResponse(BaseModel, Generic[DataT]):
     data schema for typed responses, e.g. StandardResponse[StatsResponse].
     """
 
-    status: Dict[str, Union[int, str]]
+    status: ResponseStatus
     data: Optional[Union[DataT, Dict[str, Any], List[Any]]] = None
     errors: Optional[List[ErrorDetail]] = None
     meta: Optional[Dict[str, Any]] = None
