@@ -1,7 +1,7 @@
 """Response formatting utilities for standardized API responses."""
 
 from datetime import UTC, datetime
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, Generic, List, Optional, TypeVar, Union
 
 from pydantic import BaseModel
 
@@ -16,11 +16,18 @@ class ErrorDetail(BaseModel):
     message: str
 
 
-class StandardResponse(BaseModel):
-    """Standard response format for all API responses."""
+DataT = TypeVar("DataT")
+
+
+class StandardResponse(BaseModel, Generic[DataT]):
+    """Standard response format for all API responses.
+
+    Can be used as a plain StandardResponse or parameterized with a specific
+    data schema for typed responses, e.g. StandardResponse[StatsResponse].
+    """
 
     status: Dict[str, Union[int, str]]
-    data: Optional[Union[Dict[str, Any], List[Any]]] = None
+    data: Optional[Union[DataT, Dict[str, Any], List[Any]]] = None
     errors: Optional[List[ErrorDetail]] = None
     meta: Optional[Dict[str, Any]] = None
 
