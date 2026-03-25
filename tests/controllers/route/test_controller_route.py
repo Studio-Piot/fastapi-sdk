@@ -1224,6 +1224,78 @@ class TestOwnership:
         assert len(data) == 1
         assert data[0]["account_id"] == account_claims["account_id"]
 
+    async def test_list_with_ownership_and_status_query(
+        self,
+        client,
+        auth_headers,
+        different_auth_headers,
+        account_claims,
+        different_account_claims,
+    ):
+        """Ownership and query param on status (non-ownership field) both apply."""
+        aid = account_claims["account_id"]
+
+        r_active = client.post(
+            "/projects/",
+            json={
+                "name": "Route Active Project",
+                "account_id": aid,
+                "status": ProjectStatusOptions.ACTIVE.value,
+            },
+            headers=auth_headers,
+        )
+        assert r_active.status_code == 201
+        active_uuid = r_active.json()["data"]["uuid"]
+
+        r_inactive = client.post(
+            "/projects/",
+            json={
+                "name": "Route Inactive Project",
+                "account_id": aid,
+                "status": ProjectStatusOptions.INACTIVE.value,
+            },
+            headers=auth_headers,
+        )
+        assert r_inactive.status_code == 201
+        inactive_uuid = r_inactive.json()["data"]["uuid"]
+
+        r_other = client.post(
+            "/projects/",
+            json={
+                "name": "Other Account Inactive",
+                "account_id": different_account_claims["account_id"],
+                "status": ProjectStatusOptions.INACTIVE.value,
+            },
+            headers=different_auth_headers,
+        )
+        assert r_other.status_code == 201
+
+        r_all = client.get("/projects/", headers=auth_headers)
+        assert r_all.status_code == 200
+        payload = r_all.json()
+        assert len(payload["data"]) == 2
+        assert {p["uuid"] for p in payload["data"]} == {active_uuid, inactive_uuid}
+
+        r_inactive_only = client.get(
+            f"/projects/?status={ProjectStatusOptions.INACTIVE.value}",
+            headers=auth_headers,
+        )
+        assert r_inactive_only.status_code == 200
+        payload = r_inactive_only.json()
+        assert len(payload["data"]) == 1
+        assert payload["data"][0]["uuid"] == inactive_uuid
+        assert payload["data"][0]["status"] == ProjectStatusOptions.INACTIVE.value
+        assert payload["meta"]["total"] == 1
+
+        r_active_only = client.get(
+            f"/projects/?status={ProjectStatusOptions.ACTIVE.value}",
+            headers=auth_headers,
+        )
+        assert r_active_only.status_code == 200
+        payload = r_active_only.json()
+        assert len(payload["data"]) == 1
+        assert payload["data"][0]["uuid"] == active_uuid
+
     async def test_update_with_ownership(
         self,
         client,

@@ -11,6 +11,7 @@ from motor.core import AgnosticDatabase
 from odmantic import Model
 
 from fastapi_sdk.controllers import ModelController
+from tests.constants import ProjectStatusOptions
 from tests.controllers import Account, Project, PublicController, Task
 from tests.models import AccountModel
 from tests.schemas import AccountCreate, AccountUpdate
@@ -939,6 +940,65 @@ class TestOwnership:
         assert "Access denied: account_id not in your allowed values" in str(
             exc_info.value.detail
         )
+
+    async def test_ownership_with_query_on_status_field(self, db_engine):
+        """Ownership on account_id and a filter on status (non-ownership field) both apply."""
+        controller = Project(db_engine)
+
+        account_1 = await Account(db_engine).create({"name": "Account 1"})
+        account_2 = await Account(db_engine).create({"name": "Account 2"})
+        claims = {"account_id": account_1.uuid}
+
+        project_active = await Project(db_engine).create(
+            {
+                "name": "Active Project",
+                "account_id": account_1.uuid,
+                "status": ProjectStatusOptions.ACTIVE,
+            },
+            claims=claims,
+        )
+        project_inactive = await Project(db_engine).create(
+            {
+                "name": "Inactive Project",
+                "account_id": account_1.uuid,
+                "status": ProjectStatusOptions.INACTIVE,
+            },
+            claims=claims,
+        )
+        await Project(db_engine).create(
+            {
+                "name": "Other Account Inactive",
+                "account_id": account_2.uuid,
+                "status": ProjectStatusOptions.INACTIVE,
+            },
+            claims={"account_id": account_2.uuid},
+        )
+
+        all_for_account = await controller.list(claims=claims)
+        assert len(all_for_account["items"]) == 2
+        uuids = {p.uuid for p in all_for_account["items"]}
+        assert uuids == {project_active.uuid, project_inactive.uuid}
+
+        inactive_only = await controller.list(
+            query=[{"status": ProjectStatusOptions.INACTIVE}],
+            claims=claims,
+        )
+        assert len(inactive_only["items"]) == 1
+        assert inactive_only["items"][0].uuid == project_inactive.uuid
+        assert inactive_only["items"][0].status == ProjectStatusOptions.INACTIVE
+
+        active_only = await controller.list(
+            query=[{"status": ProjectStatusOptions.ACTIVE}],
+            claims=claims,
+        )
+        assert len(active_only["items"]) == 1
+        assert active_only["items"][0].uuid == project_active.uuid
+
+        count_inactive = await controller.count(
+            query=[{"status": ProjectStatusOptions.INACTIVE}],
+            claims=claims,
+        )
+        assert count_inactive == 1
 
 
 @pytest.mark.asyncio
