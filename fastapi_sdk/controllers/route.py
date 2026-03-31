@@ -18,7 +18,7 @@ from fastapi_sdk.security.permissions import (
 from fastapi_sdk.utils.constants import ErrorCode
 from fastapi_sdk.utils.dependencies import get_request_id
 from fastapi_sdk.utils.model import convert_model_name
-from fastapi_sdk.utils.response import create_success_response
+from fastapi_sdk.utils.response import StandardResponse, create_success_response
 
 
 class RouteController:
@@ -148,7 +148,9 @@ class RouteController:
     def _add_create_route(self) -> None:
         """Add create route."""
 
-        @self.router.post("/", status_code=201)
+        @self.router.post(
+            "/", status_code=201, response_model=StandardResponse[self.schema_response]
+        )
         @self._get_permission_decorator("create")
         async def create_route(
             request: Request,
@@ -171,7 +173,9 @@ class RouteController:
     def _add_get_route(self) -> None:
         """Add get by ID route."""
 
-        @self.router.get("/{resource_id}")
+        @self.router.get(
+            "/{resource_id}", response_model=StandardResponse[self.schema_response]
+        )
         @self._get_permission_decorator("read")
         async def get_route(
             request: Request,
@@ -228,7 +232,9 @@ class RouteController:
     def _add_list_route(self) -> None:
         """Add list route."""
 
-        @self.router.get("/")
+        @self.router.get(
+            "/", response_model=StandardResponse[List[self.schema_response]]
+        )
         @self._get_permission_decorator("read")
         async def list_route(
             request: Request,
@@ -489,7 +495,9 @@ class RouteController:
     def _add_update_route(self) -> None:
         """Add update route."""
 
-        @self.router.put("/{resource_id}")
+        @self.router.put(
+            "/{resource_id}", response_model=StandardResponse[self.schema_response]
+        )
         @self._get_permission_decorator("update")
         async def update_route(
             request: Request,
@@ -522,7 +530,7 @@ class RouteController:
     def _add_delete_route(self) -> None:
         """Add delete route."""
 
-        @self.router.delete("/{resource_id}")
+        @self.router.delete("/{resource_id}", response_model=StandardResponse)
         @self._get_permission_decorator("delete")
         async def delete_route(
             request: Request,
@@ -551,7 +559,9 @@ class RouteController:
     def _add_list_deleted_route(self) -> None:
         """Add list deleted route."""
 
-        @self.router.get("/deleted/")
+        @self.router.get(
+            "/deleted/", response_model=StandardResponse[List[self.schema_response]]
+        )
         @self._get_permission_decorator("read")
         async def list_deleted_route(
             request: Request,

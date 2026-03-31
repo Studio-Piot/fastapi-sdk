@@ -16,7 +16,7 @@ from typing import List, Optional
 from pydantic import BaseModel, ConfigDict, Field
 
 from fastapi_sdk.utils.model import ShortUUIDType
-from fastapi_sdk.utils.schema import BaseResponsePaginated, datetime_now_sec
+from fastapi_sdk.utils.schema import datetime_now_sec
 from tests.constants import ProjectStatusOptions, TaskStatusOptions
 from tests.models import AssigneeModel
 
