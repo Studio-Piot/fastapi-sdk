@@ -306,8 +306,8 @@ async def test_relationships(db_engine: AgnosticDatabase):
     assert len(project_with_relations.tasks) == 1
     assert project_with_relations.tasks[0].uuid == task.uuid
 
-    # Test cascade delete
-    await Account(db_engine).delete_with_relations(
+    # Test cascade delete (cascade_delete on Account controller)
+    await Account(db_engine).delete(
         uuid=account.uuid, claims={"account_id": account.uuid}
     )
 

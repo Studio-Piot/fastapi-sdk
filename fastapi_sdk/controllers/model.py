@@ -1,12 +1,26 @@
 """Controller module for crud operations."""
 
-from typing import Any, Dict, List, Optional, Type
+import warnings
+from typing import Any, Dict, Generic, List, Optional, Type, TypeVar
+from typing_extensions import TypedDict
 
 from fastapi import HTTPException
 from fastapi_sdk.utils.constants import ErrorCode
 from fastapi_sdk.utils.schema import datetime_now_sec
 from odmantic import AIOEngine, EmbeddedModel, Model
 from pydantic import BaseModel
+
+ModelT = TypeVar("ModelT", bound=Model)
+SchemaCreateT = TypeVar("SchemaCreateT", bound=BaseModel)
+SchemaUpdateT = TypeVar("SchemaUpdateT", bound=BaseModel)
+
+
+class ModelListResult(TypedDict, Generic[ModelT]):
+    items: List[ModelT]
+    total: int
+    page: int
+    pages: int
+    size: int
 
 
 class OwnershipRule:
@@ -31,12 +45,12 @@ class OwnershipRule:
         self.allow_public = allow_public
 
 
-class ModelController:
+class ModelController(Generic[ModelT, SchemaCreateT, SchemaUpdateT]):
     """Base controller class."""
 
-    model: Type[Model]
-    schema_create: Type[BaseModel]
-    schema_update: Type[BaseModel]
+    model: Type[ModelT]
+    schema_create: Type[SchemaCreateT]
+    schema_update: Type[SchemaUpdateT]
     n_per_page: int = 25
     relationships: dict = {}  # Define relationships between models
     cascade_delete: bool = False  # Whether to cascade delete related items
@@ -251,7 +265,7 @@ class ModelController:
 
     async def create(
         self, data: dict, claims: Optional[Dict[str, Any]] = None
-    ) -> BaseModel:
+    ) -> ModelT:
         """Create a new model."""
         data = self.schema_create(**data)
         data_dict = data.model_dump()
@@ -277,7 +291,7 @@ class ModelController:
 
     async def update(
         self, uuid: str, data: dict, claims: Optional[Dict[str, Any]] = None
-    ) -> Optional[BaseModel]:
+    ) -> Optional[ModelT]:
         """Update a model."""
         model = await self.get(uuid, claims)
         if not model:
@@ -306,8 +320,8 @@ class ModelController:
         return model
 
     async def after_create(
-        self, obj: BaseModel, claims: Optional[Dict[str, Any]] = None
-    ) -> BaseModel:
+        self, obj: ModelT, claims: Optional[Dict[str, Any]] = None
+    ) -> ModelT:
         """Hook called after creating a model.
 
         Override this method in your controller to add custom behavior after creation.
@@ -323,8 +337,8 @@ class ModelController:
         return obj
 
     async def after_update(
-        self, obj: BaseModel, claims: Optional[Dict[str, Any]] = None
-    ) -> BaseModel:
+        self, obj: ModelT, claims: Optional[Dict[str, Any]] = None
+    ) -> ModelT:
         """Hook called after updating a model.
 
         Override this method in your controller to add custom behavior after update.
@@ -379,7 +393,7 @@ class ModelController:
         claims: Optional[Dict[str, Any]] = None,
         include_deleted: bool = False,
         include: Optional[List[str]] = None,
-    ) -> Optional[BaseModel]:
+    ) -> Optional[ModelT]:
         """Get a model.
 
         Args:
@@ -456,17 +470,37 @@ class ModelController:
 
     async def delete(
         self, uuid: str, claims: Optional[Dict[str, Any]] = None
-    ) -> Optional[BaseModel]:
-        """Delete a model."""
+    ) -> Optional[ModelT]:
+        """Soft-delete a model.
+
+        When ``cascade_delete`` is True, ``one_to_many`` related documents are deleted
+        first via each related controller's ``delete`` (recursive, so nested cascades apply).
+        """
         model = await self.get(uuid, claims)
-        if model:
-            model.deleted = True
-            return await self.db_engine.save(model)
-        return None
+        if not model:
+            return None
+
+        if self.cascade_delete:
+            for rel_info in self.relationships.values():
+                if rel_info["type"] != "one_to_many":
+                    continue
+                rel_controller_name = rel_info["controller"]
+                foreign_key = rel_info.get("foreign_key")
+                rel_controller_class = self.get_controller(rel_controller_name)
+                related_items = await rel_controller_class(
+                    self.db_engine
+                ).list_related(foreign_key=foreign_key, value=uuid, claims=claims)
+                for item in related_items:
+                    await rel_controller_class(self.db_engine).delete(
+                        item.uuid, claims=claims
+                    )
+
+        model.deleted = True
+        return await self.db_engine.save(model)
 
     async def undelete(
         self, uuid: str, claims: Optional[Dict[str, Any]] = None
-    ) -> Optional[BaseModel]:
+    ) -> Optional[ModelT]:
         """Undelete a model by setting deleted to False.
 
         Args:
@@ -491,7 +525,7 @@ class ModelController:
         include: Optional[List[str]] = None,
         n_per_page: Optional[int] = None,
         deleted: bool = False,
-    ) -> List[BaseModel]:
+    ) -> ModelListResult[ModelT]:
         """List models.
 
         Args:
@@ -642,7 +676,7 @@ class ModelController:
 
     async def list_related(
         self, foreign_key: str, value: str, claims: Optional[Dict[str, Any]] = None
-    ) -> List[BaseModel]:
+    ) -> List[ModelT]:
         """List related models by foreign key."""
         result = await self.list(query=[{foreign_key: value}], claims=claims)
         return result["items"]
@@ -698,7 +732,7 @@ class ModelController:
         uuid: str,
         include: Optional[List[str]] = None,
         claims: Optional[Dict[str, Any]] = None,
-    ) -> BaseModel:
+    ) -> Optional[ModelT]:
         """Get a model with its relationships."""
         # Add deprecation warning
         print(
@@ -737,29 +771,16 @@ class ModelController:
 
     async def delete_with_relations(
         self, uuid: str, claims: Optional[Dict[str, Any]] = None
-    ) -> BaseModel:
-        """Delete a model and its related items if cascade_delete is True."""
-        model = await self.get(uuid, claims)
-        if not model:
-            return None
+    ) -> Optional[ModelT]:
+        """Backward-compatible alias for :meth:`delete`.
 
-        if self.cascade_delete:
-            for rel_info in self.relationships.values():
-                if rel_info["type"] == "one_to_many":
-                    rel_controller_name = rel_info["controller"]
-                    foreign_key = rel_info.get("foreign_key")
-
-                    # Get the controller class from the registry
-                    rel_controller_class = self.get_controller(rel_controller_name)
-
-                    # Find all related items
-                    related_items = await rel_controller_class(
-                        self.db_engine
-                    ).list_related(foreign_key=foreign_key, value=uuid, claims=claims)
-                    # Delete each related item
-                    for item in related_items:
-                        await rel_controller_class(
-                            self.db_engine
-                        ).delete_with_relations(item.uuid, claims=claims)
-
+        .. deprecated::
+            Use :meth:`delete` instead; cascade is controlled by :attr:`cascade_delete`.
+        """
+        warnings.warn(
+            "delete_with_relations is deprecated; use delete() instead. "
+            "Cascade is controlled by cascade_delete.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         return await self.delete(uuid, claims)
