@@ -2,13 +2,14 @@
 
 import warnings
 from typing import Any, Dict, Generic, List, Optional, Type, TypeVar
-from typing_extensions import TypedDict
 
 from fastapi import HTTPException
-from fastapi_sdk.utils.constants import ErrorCode
-from fastapi_sdk.utils.schema import datetime_now_sec
 from odmantic import AIOEngine, EmbeddedModel, Model
 from pydantic import BaseModel
+from typing_extensions import TypedDict
+
+from fastapi_sdk.utils.constants import ErrorCode
+from fastapi_sdk.utils.schema import datetime_now_sec
 
 ModelT = TypeVar("ModelT", bound=Model)
 SchemaCreateT = TypeVar("SchemaCreateT", bound=BaseModel)
@@ -487,9 +488,9 @@ class ModelController(Generic[ModelT, SchemaCreateT, SchemaUpdateT]):
                 rel_controller_name = rel_info["controller"]
                 foreign_key = rel_info.get("foreign_key")
                 rel_controller_class = self.get_controller(rel_controller_name)
-                related_items = await rel_controller_class(
-                    self.db_engine
-                ).list_related(foreign_key=foreign_key, value=uuid, claims=claims)
+                related_items = await rel_controller_class(self.db_engine).list_related(
+                    foreign_key=foreign_key, value=uuid, claims=claims
+                )
                 for item in related_items:
                     await rel_controller_class(self.db_engine).delete(
                         item.uuid, claims=claims
@@ -727,16 +728,25 @@ class ModelController(Generic[ModelT, SchemaCreateT, SchemaUpdateT]):
         # Count the documents
         return await _collection.count_documents(_query)
 
+    # ------------------------------------------------------------
+    # DEPRECATED METHODS
+    # ------------------------------------------------------------
+
     async def get_with_relations(
         self,
         uuid: str,
         include: Optional[List[str]] = None,
         claims: Optional[Dict[str, Any]] = None,
     ) -> Optional[ModelT]:
-        """Get a model with its relationships."""
-        # Add deprecation warning
-        print(
-            "get_with_relations is deprecated. Use get with include parameter instead."
+        """Get a model with its relationships.
+
+        .. deprecated::
+            Use :meth:`get` with the ``include`` parameter instead.
+        """
+        warnings.warn(
+            "get_with_relations is deprecated; use get(..., include=...) instead.",
+            DeprecationWarning,
+            stacklevel=2,
         )
         model = await self.get(uuid, claims, include=include)
         if not model or not include:
