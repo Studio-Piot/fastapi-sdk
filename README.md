@@ -30,9 +30,23 @@ A powerful SDK for building FastAPI applications with built-in authentication, a
 
 ## Documentation
 
-- [Route Controller Documentation](docs/route_controller.md) - Learn how to create CRUD routes with authentication and permissions
-- [Model Controller Documentation](docs/model_controller.md) - Understand how to implement database operations and relationships
+### Controllers & schemas
 
+- [Route Controller](https://github.com/Studio-Piot/fastapi-sdk/blob/main/docs/route_controller.md) — Authenticated CRUD routes, pagination, and soft delete
+- [Model Controller](https://github.com/Studio-Piot/fastapi-sdk/blob/main/docs/model_controller.md) — MongoDB/ODMantic CRUD, relationships, and ownership rules
+- [Schemas](https://github.com/Studio-Piot/fastapi-sdk/blob/main/docs/schemas.md) — Base, create, update, response, and paginated schema patterns
+
+### Auth & security
+
+- [Middlewares](https://github.com/Studio-Piot/fastapi-sdk/blob/main/docs/middlewares.md) — JWT auth middleware setup and public routes
+- [Auth Middleware Errors](https://github.com/Studio-Piot/fastapi-sdk/blob/main/docs/auth_middleware_errors.md) — Authentication error codes and response shapes
+- [Custom Permissions](https://github.com/Studio-Piot/fastapi-sdk/blob/main/docs/custom_permissions.md) — Layered token + business-logic permission checks
+- [Encryption Key Mixin](https://github.com/Studio-Piot/fastapi-sdk/blob/main/docs/encryption_key_mixin.md) — Encrypted secret keys for shareable/public resource access
+
+### Responses & integrations
+
+- [Response Format](https://github.com/Studio-Piot/fastapi-sdk/blob/main/docs/response_format.md) — Standard JSON response and error envelope
+- [Webhooks](https://github.com/Studio-Piot/fastapi-sdk/blob/main/docs/webhook.md) — Signed webhook endpoints, replay protection, and event handlers
 
 ## Quick Start
 
@@ -186,4 +200,4 @@ pytest
 
 ## License
 
-MIT License - see LICENSE file for details
+MIT License — see [LICENSE](https://github.com/Studio-Piot/fastapi-sdk/blob/main/LICENSE) for details
