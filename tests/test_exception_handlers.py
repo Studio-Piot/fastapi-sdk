@@ -26,6 +26,12 @@ def app():
     async def create_user(user: UserCreate):
         return {"message": "User created", "user": user.model_dump()}
 
+    @test_app.post("/users/manual/")
+    async def create_user_manual(payload: dict):
+        # Raise bare pydantic.ValidationError (not RequestValidationError)
+        user = UserCreate.model_validate(payload)
+        return {"message": "User created", "user": user.model_dump()}
+
     return test_app
 
 
@@ -172,3 +178,29 @@ def test_validation_error_field_paths(client):
     assert "code" in email_error
     assert "message" in email_error
     assert email_error["code"] == "INVALID_FORMAT"
+
+
+def test_pydantic_validation_error(client):
+    """Test that bare pydantic.ValidationError is handled like RequestValidationError."""
+    invalid_data = {
+        "name": "",
+        "email": "not-an-email",
+        "age": "not-a-number",
+    }
+
+    response = client.post("/users/manual/", json=invalid_data)
+
+    assert response.status_code == 422
+    result = response.json()
+
+    assert result["status"]["code"] == 422
+    assert "errors" in result
+    assert len(result["errors"]) > 0
+
+    error_fields = [error["field"] for error in result["errors"]]
+    assert "name" in error_fields
+    assert "email" in error_fields
+    assert "age" in error_fields
+
+    # Bare ValidationError has no request body attached
+    assert result.get("data") is None

@@ -1,8 +1,11 @@
 """Exception handlers for FastAPI to format responses consistently."""
 
+from typing import Any, Optional
+
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
+from pydantic import ValidationError
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from fastapi_sdk.utils.constants import ErrorCode
@@ -76,22 +79,14 @@ async def http_exception_handler(request: Request, exc: HTTPException) -> JSONRe
     return JSONResponse(status_code=exc.status_code, content=response)
 
 
-async def validation_exception_handler(
-    request: Request, exc: RequestValidationError
+def _format_validation_errors(
+    error_list: list[dict[str, Any]],
+    request_id: Optional[str] = None,
+    original_body: Any = None,
 ) -> JSONResponse:
-    """Handle validation errors and format according to standard response format.
-
-    Args:
-        request: The FastAPI request object
-        exc: The RequestValidationError instance
-
-    Returns:
-        JSONResponse with standardized format
-    """
-    request_id = get_request_id(request)
-
+    """Format Pydantic-style validation errors into a standardized JSON response."""
     errors = []
-    for error in exc.errors():
+    for error in error_list:
         field_path = ".".join(str(loc) for loc in error.get("loc", []) if loc != "body")
         field = field_path if field_path else None
 
@@ -125,11 +120,6 @@ async def validation_exception_handler(
             )
         )
 
-    # Extract the original request body to include in the error response
-    original_body = None
-    if hasattr(exc, "body"):
-        original_body = exc.body
-
     response = create_error_response(
         errors=errors,
         status_code=HTTP_422_UNPROCESSABLE_CONTENT,
@@ -137,6 +127,39 @@ async def validation_exception_handler(
         data=original_body,
     )
     return JSONResponse(status_code=HTTP_422_UNPROCESSABLE_CONTENT, content=response)
+
+
+async def validation_exception_handler(
+    request: Request, exc: RequestValidationError
+) -> JSONResponse:
+    """Handle validation errors and format according to standard response format.
+
+    Args:
+        request: The FastAPI request object
+        exc: The RequestValidationError instance
+
+    Returns:
+        JSONResponse with standardized format
+    """
+    request_id = get_request_id(request)
+    original_body = getattr(exc, "body", None)
+    return _format_validation_errors(exc.errors(), request_id, original_body)
+
+
+async def pydantic_validation_exception_handler(
+    request: Request, exc: ValidationError
+) -> JSONResponse:
+    """Handle Pydantic ValidationError and format according to standard response format.
+
+    Args:
+        request: The FastAPI request object
+        exc: The ValidationError instance
+
+    Returns:
+        JSONResponse with standardized format
+    """
+    request_id = get_request_id(request)
+    return _format_validation_errors(exc.errors(), request_id)
 
 
 async def starlette_exception_handler(
@@ -172,4 +195,5 @@ def register_exception_handlers(app: FastAPI) -> None:
     """
     app.add_exception_handler(HTTPException, http_exception_handler)
     app.add_exception_handler(RequestValidationError, validation_exception_handler)
+    app.add_exception_handler(ValidationError, pydantic_validation_exception_handler)
     app.add_exception_handler(StarletteHTTPException, starlette_exception_handler)
