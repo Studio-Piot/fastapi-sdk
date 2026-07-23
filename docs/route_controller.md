@@ -8,9 +8,9 @@ The Route Controller is a powerful base class for generating authenticated CRUD 
 - Built-in authentication support
 - Pagination support
 - Soft delete functionality
-- Customizable response schemas
+- Customizable request/response schemas
 - Flexible route inclusion/exclusion
-- Type-safe with Pydantic models
+- Type-safe with Pydantic schemas
 
 ## Setup
 
@@ -75,32 +75,9 @@ async def get_db_engine():
 
 ## Usage
 
-### 1. Define Your Models
+### 1. Define Your Schemas
 
-First, define your Pydantic models for request/response handling:
-
-```python
-from pydantic import BaseModel
-from typing import Optional
-from datetime import datetime
-
-class AccountBase(BaseModel):
-    name: str
-
-class AccountCreate(AccountBase):
-    pass
-
-class AccountUpdate(AccountBase):
-    name: Optional[str] = None
-
-class AccountResponse(AccountBase):
-    uuid: str
-    created_at: datetime
-    updated_at: datetime
-
-    class Config:
-        from_attributes = True
-```
+Define Pydantic **schemas** for request and response data (create, update, response, paginated). These are not database models — see [Schemas](schemas.md) for the full pattern and examples.
 
 ### 2. Create Your Model Controller
 
@@ -270,17 +247,17 @@ Available options:
 - `"delete"`: Delete endpoint
 - `"list_deleted"`: List deleted endpoint
 
-### Response Schemas
+### Request & Response Schemas
 
-You can customize the response schemas for different operations:
+Wire your schemas (see [Schemas](schemas.md)) into the route controller:
 
 ```python
 account_routes = RouteController(
     # ... other parameters ...
-    schema_response=AccountResponse,  # Response for single item
-    schema_response_paginated=BaseResponsePaginated[AccountResponse],  # Response for list
-    schema_create=AccountCreate,  # Schema for creation
-    schema_update=AccountUpdate,  # Schema for updates
+    schema_response=AccountResponse,  # Single-item response
+    schema_response_paginated=AccountResponsePaginated,  # List / paginated response
+    schema_create=AccountCreate,  # Create request body
+    schema_update=AccountUpdate,  # Update request body
 )
 ```
 
@@ -304,10 +281,11 @@ The Route Controller includes standard error handling:
 
 ## Best Practices
 
-1. **Model Design**
-   - Use Pydantic models for request/response validation
+1. **Schema Design**
+   - Use Pydantic schemas for request/response validation (see [Schemas](schemas.md))
+   - Keep database models (ODMantic) separate from API schemas
    - Include proper type hints
-   - Use `from_attributes = True` in response models
+   - Use `from_attributes=True` (or `ConfigDict(from_attributes=True)`) on response schemas
 
 2. **Ownership Configuration**
    - Configure ownership rules for each model controller
@@ -317,7 +295,7 @@ The Route Controller includes standard error handling:
      class ProjectController(ModelController):
          ownership_rule = OwnershipRule(
              claim_field="account_id",  # Field in the JWT claims
-             model_field="account_id",  # Field in the model
+             model_field="account_id",  # Field on the database model
              allow_public=False,  # Whether to allow access without ownership
          )
      ```
@@ -334,7 +312,7 @@ The Route Controller includes standard error handling:
 4. **Route Configuration**
    - Use meaningful prefixes and tags
    - Include only necessary routes
-   - Customize response schemas as needed
+   - Pass the appropriate schemas into `RouteController`
 
 5. **Security**
    - Use HTTPS in production
@@ -343,34 +321,24 @@ The Route Controller includes standard error handling:
 
 ## Example
 
-Here's a complete example of setting up a Route Controller:
+Here's a complete example of setting up a Route Controller. Schema definitions live in [Schemas](schemas.md); import them rather than redefining them here.
 
 ```python
 from fastapi import FastAPI
+from fastapi_sdk.controllers.model import ModelController, OwnershipRule
 from fastapi_sdk.controllers.route import RouteController
 from fastapi_sdk.middleware.auth import AuthMiddleware
-from fastapi_sdk.utils.schema import BaseResponsePaginated
-from pydantic import BaseModel
-from typing import Optional
-from datetime import datetime
 
-# Models
-class AccountBase(BaseModel):
-    name: str
+# Database model (ODMantic) — see model_controller.md
+from .models import AccountModel
 
-class AccountCreate(AccountBase):
-    pass
-
-class AccountUpdate(AccountBase):
-    name: Optional[str] = None
-
-class AccountResponse(AccountBase):
-    uuid: str
-    created_at: datetime
-    updated_at: datetime
-
-    class Config:
-        from_attributes = True
+# Request/response schemas — see schemas.md
+from .schemas import (
+    AccountCreate,
+    AccountResponse,
+    AccountResponsePaginated,
+    AccountUpdate,
+)
 
 # Controller
 class AccountController(ModelController):
@@ -536,76 +504,6 @@ When a user lacks the required permission, the API returns a 403 Forbidden respo
 2. **Superuser Override**: Superuser roles automatically get access to all operations
 3. **Permission Naming**: Keep permission names consistent with your model names
 4. **Documentation**: Document required permissions in your API documentation
-
-## Example
-
-Here's a complete example of setting up a Route Controller:
-
-```python
-from fastapi import FastAPI
-from fastapi_sdk.controllers.route import RouteController
-from fastapi_sdk.middleware.auth import AuthMiddleware
-from fastapi_sdk.utils.schema import BaseResponsePaginated
-from pydantic import BaseModel
-from typing import Optional
-from datetime import datetime
-
-# Models
-class AccountBase(BaseModel):
-    name: str
-
-class AccountCreate(AccountBase):
-    pass
-
-class AccountUpdate(AccountBase):
-    name: Optional[str] = None
-
-class AccountResponse(AccountBase):
-    uuid: str
-    created_at: datetime
-    updated_at: datetime
-
-    class Config:
-        from_attributes = True
-
-# Controller
-class AccountController(ModelController):
-    """Account controller."""
-
-    model = AccountModel
-    schema_create = AccountCreate
-    schema_update = AccountUpdate
-    schema_response = AccountResponse
-    cascade_delete = True  # Will delete related projects and tasks
-    ownership_rule = OwnershipRule(
-        claim_field="account_id",
-        model_field="uuid",
-        allow_public=False,
-    )
-
-    relationships = {
-        "projects": {
-            "type": "one_to_many",
-            "controller": "Project",
-            "foreign_key": "account_id",
-        }
-    }
-
-    # Define custom pipeline stages
-    extra_pipeline = [
-        {
-            "$project": {
-                "name": 1,
-                "email": 1,
-                "status": 1,
-                "created_at": 1,
-                "is_active": {"$eq": ["$status", "active"]}
-            }
-        }
-    ]
-
-    # The pipeline will be automatically applied to all list queries
-```
 
 ## Query and Order Parameters
 
@@ -964,198 +862,3 @@ class AccountController(ModelController):
    - Provide fallback behavior when needed
    - Log pipeline execution for debugging
 
-## Permission System
-
-The RouteController implements a permission-based access control system that requires specific permissions for each CRUD operation. The permissions are automatically generated based on the model name and the action being performed.
-
-### Permission Format
-
-Permissions follow the format `{model_name}:{action}`, where:
-- `model_name` is the lowercase name of your model (e.g., "project", "account")
-- `action` is one of: "create", "read", "update", "delete"
-
-For example:
-- `project:create` - Permission to create new projects
-- `project:read` - Permission to view projects
-- `project:update` - Permission to modify projects
-- `project:delete` - Permission to delete projects
-
-### User Claims
-
-The permission system relies on user claims in the request. The claims should include:
-- `permissions`: List of permission strings the user has
-- `roles`: List of roles the user has
-
-Example claims:
-```json
-{
-    "account_id": "acc_123",
-    "permissions": ["project:create", "project:read"],
-    "roles": ["user"]
-}
-```
-
-### Permission Checks
-
-The system checks permissions in the following order:
-1. First checks if the user has the specific permission (e.g., "project:create")
-2. If not, checks if the user has an admin or superuser role
-3. If neither condition is met, returns a 403 Forbidden error
-
-### Route Permissions
-
-Each route requires specific permissions:
-
-| Route | Method | Permission Required |
-|-------|---------|-------------------|
-| Create | POST | `{model_name}:create` |
-| Get | GET | `{model_name}:read` |
-| List | GET | `{model_name}:read` |
-| Update | PUT | `{model_name}:update` |
-| Delete | DELETE | `{model_name}:delete` |
-| List Deleted | GET | `{model_name}:read` |
-
-### Example Usage
-
-```python
-from fastapi_sdk.controllers import RouteController
-from fastapi_sdk.security.permissions import require_permission
-
-# Create a route controller
-route_controller = RouteController(
-    prefix="/projects",
-    tags=["projects"],
-    controller=ProjectController,
-    get_db=get_db,
-    schema_response=ProjectResponse,
-    schema_response_paginated=ProjectResponsePaginated,
-    schema_create=ProjectCreate,
-    schema_update=ProjectUpdate,
-)
-
-# The routes will automatically require the following permissions:
-# POST /projects/ -> project:create
-# GET /projects/{id} -> project:read
-# GET /projects/ -> project:read
-# PUT /projects/{id} -> project:update
-# DELETE /projects/{id} -> project:delete
-# GET /projects/deleted/ -> project:read
-```
-
-### Error Responses
-
-When a user lacks the required permission, the API returns a 403 Forbidden response:
-
-```json
-{
-    "detail": "Permission denied: project:create required"
-}
-```
-
-### Best Practices
-
-1. **Role-Based Access**: Use roles for broad access control and specific permissions for fine-grained control
-2. **Superuser Override**: Superuser roles automatically get access to all operations
-3. **Permission Naming**: Keep permission names consistent with your model names
-4. **Documentation**: Document required permissions in your API documentation
-
-## Example
-
-Here's a complete example of setting up a Route Controller:
-
-```python
-from fastapi import FastAPI
-from fastapi_sdk.controllers.route import RouteController
-from fastapi_sdk.middleware.auth import AuthMiddleware
-from fastapi_sdk.utils.schema import BaseResponsePaginated
-from pydantic import BaseModel
-from typing import Optional
-from datetime import datetime
-
-# Models
-class AccountBase(BaseModel):
-    name: str
-
-class AccountCreate(AccountBase):
-    pass
-
-class AccountUpdate(AccountBase):
-    name: Optional[str] = None
-
-class AccountResponse(AccountBase):
-    uuid: str
-    created_at: datetime
-    updated_at: datetime
-
-    class Config:
-        from_attributes = True
-
-# Controller
-class AccountController(ModelController):
-    """Account controller."""
-
-    model = AccountModel
-    schema_create = AccountCreate
-    schema_update = AccountUpdate
-    schema_response = AccountResponse
-    cascade_delete = True  # Will delete related projects and tasks
-    ownership_rule = OwnershipRule(
-        claim_field="account_id",
-        model_field="uuid",
-        allow_public=False,
-    )
-
-    relationships = {
-        "projects": {
-            "type": "one_to_many",
-            "controller": "Project",
-            "foreign_key": "account_id",
-        }
-    }
-
-    # Define custom pipeline stages
-    extra_pipeline = [
-        {
-            "$project": {
-                "name": 1,
-                "email": 1,
-                "status": 1,
-                "created_at": 1,
-                "is_active": {"$eq": ["$status", "active"]}
-            }
-        }
-    ]
-
-    # The pipeline will be automatically applied to all list queries
-```
-
-# FastAPI app
-app = FastAPI()
-
-# Middleware
-app.add_middleware(
-    AuthMiddleware,
-    secret_key="your-secret-key",
-    algorithm="HS256",
-    token_prefix="Bearer",
-)
-
-# Database
-async def get_db():
-    # Implementation
-    pass
-
-# Routes
-account_routes = RouteController(
-    prefix="/accounts",
-    tags=["accounts"],
-    controller=AccountController,
-    get_db=get_db,
-    schema_response=AccountResponse,
-    schema_response_paginated=AccountResponsePaginated,
-    schema_create=AccountCreate,
-    schema_update=AccountUpdate,
-)
-
-# Include routes
-app.include_router(account_routes.router) 
