@@ -11,8 +11,9 @@ from functools import lru_cache
 from typing import Optional
 
 import requests
-from authlib.jose import JsonWebKey, JsonWebToken
-from authlib.jose.errors import BadSignatureError, ExpiredTokenError, InvalidClaimError
+from joserfc import jwt
+from joserfc.errors import BadSignatureError, ExpiredTokenError, InvalidClaimError
+from joserfc.jwk import KeySet, RSAKey
 
 from fastapi_sdk.utils.constants import ErrorCode
 
@@ -20,7 +21,7 @@ from fastapi_sdk.utils.constants import ErrorCode
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
 
-jwt = JsonWebToken(["RS256"])
+ALGORITHM = "RS256"
 
 
 class TokenError(Exception):
@@ -89,8 +90,12 @@ def get_jwk(jwk_url: str):
         timeout=10,
     )
     response.raise_for_status()
-    jwk = response.json()
-    return JsonWebKey.import_key(json.loads(jwk))
+    data = response.json()
+    if isinstance(data, str):
+        data = json.loads(data)
+    if isinstance(data, dict) and "keys" in data:
+        return KeySet.import_key_set(data)
+    return RSAKey.import_key(data)
 
 
 def decode_access_token(
@@ -122,22 +127,18 @@ def decode_access_token(
         TokenVerificationFailedError: If token verification fails for other reasons
     """
     try:
-        # Configure claims validation options including issuer
-        claims_options = {
-            "iss": {"essential": True, "value": auth_issuer},
-        }
-
         if env == "test" and test_public_key_path:
             with open(test_public_key_path, "rb") as f:
-                test_public_key = f.read()
-            claims = jwt.decode(token, test_public_key, claims_options=claims_options)
+                key = RSAKey.import_key(f.read())
         else:
-            # Get the JWKS from the issuer
-            jwk = cached_jwk_response(jwk_url)
-            claims = jwt.decode(token, jwk, claims_options=claims_options)
+            key = cached_jwk_response(jwk_url)
 
-        # Validate expiration and other standard claims
-        claims.validate()
+        token_data = jwt.decode(token, key, algorithms=[ALGORITHM])
+        claims_registry = jwt.JWTClaimsRegistry(
+            iss={"essential": True, "value": auth_issuer},
+        )
+        claims_registry.validate(token_data.claims)
+        claims = token_data.claims
 
         # Check if tenant_id matches auth_client_id
         if claims.get("tenant_id") != auth_client_id:

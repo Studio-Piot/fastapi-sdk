@@ -3,12 +3,11 @@
 from datetime import UTC, datetime, timedelta
 from typing import Optional
 
-from authlib.jose import JsonWebToken
+from joserfc import jwt
+from joserfc.jwk import RSAKey
 
 ALGORITHM = "RS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
-
-jwt = JsonWebToken(["RS256"])
 
 
 def create_access_token(
@@ -20,6 +19,5 @@ def create_access_token(
     )
     payload = {**data, "exp": expire}
     with open(test_private_key_path, "rb") as f:
-        test_private_key = f.read()
-    token = jwt.encode({"alg": ALGORITHM}, payload, test_private_key)
-    return token.decode("utf-8")
+        private_key = RSAKey.import_key(f.read())
+    return jwt.encode({"alg": ALGORITHM}, payload, private_key)
