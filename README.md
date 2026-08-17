@@ -38,7 +38,7 @@ A powerful SDK for building FastAPI applications with built-in authentication, a
 
 ### Auth & security
 
-- [Middlewares](https://github.com/Studio-Piot/fastapi-sdk/blob/main/docs/middlewares.md) — JWT auth middleware setup and public routes
+- [Middlewares](https://github.com/Studio-Piot/fastapi-sdk/blob/main/docs/middlewares.md) — JWT auth middleware setup, public routes, and claims helpers
 - [Auth Middleware Errors](https://github.com/Studio-Piot/fastapi-sdk/blob/main/docs/auth_middleware_errors.md) — Authentication error codes and response shapes
 - [Custom Permissions](https://github.com/Studio-Piot/fastapi-sdk/blob/main/docs/custom_permissions.md) — Layered token + business-logic permission checks
 - [Encryption Key Mixin](https://github.com/Studio-Piot/fastapi-sdk/blob/main/docs/encryption_key_mixin.md) — Encrypted secret keys for shareable/public resource access
