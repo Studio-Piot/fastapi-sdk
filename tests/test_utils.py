@@ -4,8 +4,13 @@ from datetime import UTC, datetime
 
 from fastapi_sdk.utils.claims import claims_user_id, claims_user_name
 from fastapi_sdk.utils.model import convert_model_name
-from fastapi_sdk.utils.response import create_success_response
-from fastapi_sdk.utils.schema import serialize_datetime
+from fastapi_sdk.utils.response import create_error_response, create_success_response
+from fastapi_sdk.utils.schema import datetime_now_sec, serialize_datetime
+
+
+def _parse(value: str) -> datetime:
+    """Parse a serialized envelope timestamp back into a datetime."""
+    return datetime.fromisoformat(value.replace("Z", "+00:00"))
 
 
 def test_convert_model_name_basic():
@@ -46,6 +51,37 @@ def test_create_success_response_timestamp_uses_z_suffix():
     """Response metadata timestamps should use the same UTC format as model fields."""
     response = create_success_response(data={"ok": True})
     assert response["meta"]["timestamp"].endswith("Z")
+
+
+def test_success_response_timestamp_has_second_precision():
+    """Envelope timestamps carry no microseconds, matching model fields.
+
+    A response mixing `2026-01-01T00:00:00.123456Z` in meta with
+    `2026-01-01T00:00:00Z` on the record it wraps is the same instant written
+    two ways. `request_id` is what identifies a response; the timestamp does
+    not need sub-second precision to do its job.
+    """
+    response = create_success_response(data={"ok": True})
+    assert response["meta"]["timestamp"] == serialize_datetime(
+        _parse(response["meta"]["timestamp"]).replace(microsecond=0)
+    )
+    assert "." not in response["meta"]["timestamp"]
+
+
+def test_error_response_timestamp_has_second_precision():
+    """Error envelopes use the same precision as success envelopes."""
+    response = create_error_response(status_code=400, errors=["boom"])
+    assert "." not in response["meta"]["timestamp"]
+
+
+def test_envelope_and_model_timestamps_have_matching_shape():
+    """The two timestamps in one response are written the same way."""
+    envelope = create_success_response(data={"ok": True})["meta"]["timestamp"]
+    model_field = serialize_datetime(datetime_now_sec())
+
+    # Same length and format; only the instant may differ.
+    assert len(envelope) == len(model_field)
+    assert envelope.endswith("Z") and model_field.endswith("Z")
 
 
 def test_claims_user_id_returns_sub():

@@ -1,12 +1,11 @@
 """Response formatting utilities for standardized API responses."""
 
-from datetime import UTC, datetime
 from typing import Any, Dict, Generic, List, Optional, TypeVar, Union
 
 from pydantic import BaseModel
 
 from fastapi_sdk.utils.constants import ErrorCode
-from fastapi_sdk.utils.schema import serialize_datetime
+from fastapi_sdk.utils.schema import datetime_now_sec, serialize_datetime
 
 
 class ErrorDetail(BaseModel):
@@ -86,7 +85,7 @@ def create_success_response(
         data = data.dict()
 
     response_meta = {
-        "timestamp": serialize_datetime(datetime.now(UTC)),
+        "timestamp": serialize_datetime(datetime_now_sec()),
     }
     if request_id:
         response_meta["request_id"] = request_id
@@ -144,7 +143,7 @@ def create_error_response(
                 )
 
     response_meta = {
-        "timestamp": serialize_datetime(datetime.now(UTC)),
+        "timestamp": serialize_datetime(datetime_now_sec()),
     }
     if request_id:
         response_meta["request_id"] = request_id
