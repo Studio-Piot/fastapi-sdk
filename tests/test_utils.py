@@ -2,6 +2,7 @@
 
 from datetime import UTC, datetime
 
+from fastapi_sdk.utils.claims import claims_user_id, claims_user_name
 from fastapi_sdk.utils.model import convert_model_name
 from fastapi_sdk.utils.response import create_success_response
 from fastapi_sdk.utils.schema import serialize_datetime
@@ -45,3 +46,51 @@ def test_create_success_response_timestamp_uses_z_suffix():
     """Response metadata timestamps should use the same UTC format as model fields."""
     response = create_success_response(data={"ok": True})
     assert response["meta"]["timestamp"].endswith("Z")
+
+
+def test_claims_user_id_returns_sub():
+    """The user id comes from the sub claim."""
+    assert claims_user_id({"sub": "usr_abc"}) == "usr_abc"
+
+
+def test_claims_user_id_without_claims():
+    """Missing claims yield an empty string rather than raising."""
+    assert claims_user_id(None) == ""
+    assert claims_user_id({}) == ""
+
+
+def test_claims_user_name_joins_first_and_last():
+    """The display name is first and last joined."""
+    claims = {"user_first_name": "Ada", "user_last_name": "Lovelace"}
+    assert claims_user_name(claims) == "Ada Lovelace"
+
+
+def test_claims_user_name_with_only_first_name():
+    """A missing last name does not leave a trailing space."""
+    assert claims_user_name({"user_first_name": "Ada"}) == "Ada"
+
+
+def test_claims_user_name_with_only_last_name():
+    """A missing first name does not leave a leading space."""
+    assert claims_user_name({"user_last_name": "Lovelace"}) == "Lovelace"
+
+
+def test_claims_user_name_falls_back_to_email():
+    """With no name parts, the email identifies the user."""
+    assert claims_user_name({"user_email": "ada@test.com"}) == "ada@test.com"
+
+
+def test_claims_user_name_prefers_name_over_email():
+    """The email is only a fallback, never preferred over a real name."""
+    claims = {
+        "user_first_name": "Ada",
+        "user_last_name": "Lovelace",
+        "user_email": "ada@test.com",
+    }
+    assert claims_user_name(claims) == "Ada Lovelace"
+
+
+def test_claims_user_name_without_claims():
+    """Missing claims yield an empty string rather than raising."""
+    assert claims_user_name(None) == ""
+    assert claims_user_name({}) == ""

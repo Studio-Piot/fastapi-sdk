@@ -77,6 +77,50 @@ The middleware accepts the following parameters:
        return {"user_id": claims["sub"]}
    ```
 
+### Claims helpers
+
+`request.state.claims` is the decoded token payload — a plain dict. Reading
+identity out of it directly works, but `claims["sub"]` raises when the claim is
+absent, and building a display name means repeating the same first/last/email
+juggling in every project.
+
+`fastapi_sdk.utils.claims` provides that as two helpers:
+
+```python
+from fastapi_sdk.utils.claims import claims_user_id, claims_user_name
+
+claims_user_id(claims)    # "usr_RiuPvVqisD", or "" when absent
+claims_user_name(claims)  # "Ada Lovelace", falling back to the email, then ""
+```
+
+| Helper | Reads | Returns |
+|---|---|---|
+| `claims_user_id` | `sub` | The user id, or `""` |
+| `claims_user_name` | `user_first_name`, `user_last_name`, `user_email` | First and last joined; the email when neither is present; otherwise `""` |
+
+**Neither helper raises**, and both accept `None`. That is deliberate: the usual
+call site is a controller hook stamping who did something onto a record, and a
+missing claim should leave a blank name rather than abort the write.
+
+```python
+from fastapi_sdk.utils.claims import claims_user_id, claims_user_name
+
+
+class TaskController(ModelController):
+    """Records who created each task."""
+
+    async def before_create(
+        self, data_dict: dict, claims: Optional[dict] = None
+    ) -> dict:
+        data_dict["created_by_id"] = claims_user_id(claims)
+        data_dict["created_by_name"] = claims_user_name(claims)
+        return data_dict
+```
+
+Storing the name alongside the id keeps an audit trail readable without a join
+or a call back to the auth provider. It is a snapshot: it records the name as it
+was when the action happened, and does not follow later changes to it.
+
 ### Error Handling
 
 The middleware returns appropriate error responses:
