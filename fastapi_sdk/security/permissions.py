@@ -2,11 +2,67 @@
 
 import asyncio
 from functools import wraps
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Callable, Dict, Iterable, Literal, Mapping, Optional
 
 from fastapi import HTTPException, Request
 
 from fastapi_sdk.utils.constants import ErrorCode
+
+# A role mapped to "*" may call every permission. superuser is always that role.
+Grant = frozenset[str] | Literal["*"]
+
+
+class RolePermissions:
+    """Role grants checked alongside permissions carried on the token.
+
+    Token ``permissions`` still grant access on their own. This map adds
+    grants for roles. It never writes those grants back onto the claims.
+    """
+
+    def __init__(
+        self,
+        grants: Optional[Mapping[str, Iterable[str] | Literal["*"]]] = None,
+    ):
+        self.grants: Dict[str, Grant] = {}
+        if grants:
+            for role, permissions in grants.items():
+                if role == "superuser":
+                    continue
+                self.grant(role, permissions)
+        self.grants["superuser"] = "*"
+
+    def grant(self, role: str, permissions: Iterable[str] | Literal["*"]) -> None:
+        if permissions == "*":
+            self.grants[role] = "*"
+            return
+        self.grants[role] = frozenset(permissions)
+
+    def allows(self, claims: Mapping[str, Any], permission: str) -> bool:
+        token_permissions = claims.get("permissions") or []
+        if permission in token_permissions:
+            return True
+        for role in claims.get("roles") or []:
+            granted = self.grants.get(role)
+            if granted == "*":
+                return True
+            if granted is not None and permission in granted:
+                return True
+        return False
+
+
+_policy = RolePermissions()
+
+
+def configure_role_permissions(
+    grants: Optional[Mapping[str, Iterable[str] | Literal["*"]]] = None,
+) -> None:
+    """Install the role grants used by every permission check.
+
+    Replaces any grants from a previous call. ``superuser`` stays a grant of
+    every permission. The decoded token claims are left unchanged.
+    """
+    global _policy
+    _policy = RolePermissions(grants)
 
 
 def require_permission(permission: str) -> Callable:
@@ -56,17 +112,7 @@ def require_permission(permission: str) -> Callable:
                     },
                 )
 
-            # Get user permissions from claims
-            user_permissions: List[str] = claims.get("permissions", [])
-            user_roles: List[str] = claims.get("roles", [])
-
-            # Check if user has the required permission directly
-            if permission in user_permissions:
-                return await func(*args, **kwargs)
-
-            # Check if user has a role that grants the permission
-            # This is a simple implementation - you might want to add role-based permission mapping
-            if "superuser" in user_roles:
+            if _policy.allows(claims, permission):
                 return await func(*args, **kwargs)
 
             raise HTTPException(
@@ -134,21 +180,14 @@ def require_combined_permission(
                     },
                 )
 
-            # First, check standard permission
-            user_permissions: List[str] = claims.get("permissions", [])
-            user_roles: List[str] = claims.get("roles", [])
-
-            # Check if user has the required permission directly
-            if permission not in user_permissions:
-                # Check if user has a role that grants the permission
-                if "superuser" not in user_roles:
-                    raise HTTPException(
-                        status_code=403,
-                        detail={
-                            "code": ErrorCode.PERMISSION_DENIED.value,
-                            "message": f"Permission denied: {permission} required",
-                        },
-                    )
+            if not _policy.allows(claims, permission):
+                raise HTTPException(
+                    status_code=403,
+                    detail={
+                        "code": ErrorCode.PERMISSION_DENIED.value,
+                        "message": f"Permission denied: {permission} required",
+                    },
+                )
 
             # Second, check custom permission if provided
             if custom_permission_func is not None:
