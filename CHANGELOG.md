@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.12.16] - 2026-09-26
+
+### Added
+
+- `configure_role_permissions` maps a role to a fixed permission list. `require_permission` and `require_combined_permission` both consult it. `superuser` still grants every permission. Token claims are left unchanged.
+
 ## [0.12.13] - 2026-08-05
 
 ### Changed
