@@ -239,3 +239,38 @@ def test_pydantic_validation_error_with_form_payload(client):
     assert response.status_code == 422
     result = response.json()
     assert result["data"] == {"name": "", "age": "not-a-number"}
+
+
+def _debug_app(debug: bool) -> FastAPI:
+    test_app = FastAPI()
+    register_exception_handlers(test_app, debug=debug)
+
+    @test_app.post("/users/")
+    async def create_user(user: UserCreate):
+        return user.model_dump()
+
+    return test_app
+
+
+def test_debug_mode_logs_error_responses(caplog):
+    """Test that debug mode logs the method, path, status and response body."""
+    client = TestClient(_debug_app(debug=True))
+
+    with caplog.at_level("WARNING", logger="fastapi_sdk.errors"):
+        client.post("/users/", json={"name": "", "email": "x", "age": 1})
+
+    records = [r for r in caplog.records if r.name == "fastapi_sdk.errors"]
+    assert len(records) == 1
+    message = records[0].getMessage()
+    assert "POST /users/ -> 422" in message
+    assert '"email": "x"' in message
+
+
+def test_error_responses_not_logged_by_default(caplog):
+    """Test that error responses are not logged unless debug mode is on."""
+    client = TestClient(_debug_app(debug=False))
+
+    with caplog.at_level("DEBUG", logger="fastapi_sdk.errors"):
+        client.post("/users/", json={"name": "", "email": "x", "age": 1})
+
+    assert not [r for r in caplog.records if r.name == "fastapi_sdk.errors"]

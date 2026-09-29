@@ -1,6 +1,8 @@
 """Exception handlers for FastAPI to format responses consistently."""
 
-from typing import Any, Optional
+import json
+import logging
+from typing import Any, Awaitable, Callable, Optional
 
 from fastapi import FastAPI, HTTPException, Request, UploadFile
 from fastapi.exceptions import RequestValidationError
@@ -16,6 +18,10 @@ from fastapi_sdk.utils.response import create_error_response, create_single_erro
 # Define the new constant to avoid deprecation warning
 # HTTP_422_UNPROCESSABLE_ENTITY is deprecated in favor of HTTP_422_UNPROCESSABLE_CONTENT
 HTTP_422_UNPROCESSABLE_CONTENT = 422
+
+logger = logging.getLogger("fastapi_sdk.errors")
+
+ExceptionHandler = Callable[[Request, Any], Awaitable[JSONResponse]]
 
 
 async def http_exception_handler(request: Request, exc: HTTPException) -> JSONResponse:
@@ -224,13 +230,40 @@ async def starlette_exception_handler(
     return JSONResponse(status_code=exc.status_code, content=response)
 
 
-def register_exception_handlers(app: FastAPI) -> None:
+def _with_debug_logging(handler: ExceptionHandler) -> ExceptionHandler:
+    """Wrap an exception handler so it logs the response it returns."""
+
+    async def wrapper(request: Request, exc: Any) -> JSONResponse:
+        response = await handler(request, exc)
+        body = json.dumps(json.loads(response.body), indent=2)
+        logger.warning(
+            "%s %s -> %s\n%s",
+            request.method,
+            request.url.path,
+            response.status_code,
+            body,
+        )
+        return response
+
+    return wrapper
+
+
+def register_exception_handlers(app: FastAPI, debug: bool = False) -> None:
     """Register all exception handlers with the FastAPI app.
 
     Args:
         app: The FastAPI application instance
+        debug: Log every error response to the ``fastapi_sdk.errors`` logger
+            (method, path, status and the full JSON body). Keep off in production,
+            as the body can include submitted payloads.
     """
-    app.add_exception_handler(HTTPException, http_exception_handler)
-    app.add_exception_handler(RequestValidationError, validation_exception_handler)
-    app.add_exception_handler(ValidationError, pydantic_validation_exception_handler)
-    app.add_exception_handler(StarletteHTTPException, starlette_exception_handler)
+    handlers: list[tuple[type[Exception], ExceptionHandler]] = [
+        (HTTPException, http_exception_handler),
+        (RequestValidationError, validation_exception_handler),
+        (ValidationError, pydantic_validation_exception_handler),
+        (StarletteHTTPException, starlette_exception_handler),
+    ]
+    for exc_class, handler in handlers:
+        if debug:
+            handler = _with_debug_logging(handler)
+        app.add_exception_handler(exc_class, handler)
