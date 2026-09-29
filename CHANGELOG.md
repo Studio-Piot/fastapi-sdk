@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.12.18] - 2026-09-29
+
+### Fixed
+
+- An `HTTPException` with status 400, 409 or 422 raised during a POST, PUT or PATCH now returns the submitted payload in `data`, as validation errors already did. This covers errors raised from controller hooks. Other statuses and methods still return `data: null`.
+
 ## [0.12.17] - 2026-09-29
 
 ### Added

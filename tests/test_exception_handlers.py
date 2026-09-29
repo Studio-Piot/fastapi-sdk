@@ -1,9 +1,10 @@
 """Tests for exception handlers."""
 
 import pytest
-from fastapi import FastAPI, Form
+from fastapi import FastAPI, Form, HTTPException
 from fastapi.testclient import TestClient
 from pydantic import BaseModel, Field
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from fastapi_sdk.utils.exception_handler import register_exception_handlers
 
@@ -330,3 +331,71 @@ def test_debug_log_masks_custom_sensitive_fields(caplog):
 
     assert '"email": "***"' in message
     assert '"password": "hunter2"' in message
+
+
+@pytest.fixture
+def http_error_client():
+    """App whose routes raise HTTPException with the status and method under test."""
+    test_app = FastAPI()
+    register_exception_handlers(test_app)
+
+    @test_app.api_route("/raise/{status_code}/", methods=["GET", "POST", "PUT", "PATCH"])
+    async def raise_status(status_code: int):
+        raise HTTPException(
+            status_code=status_code,
+            detail=[{"msg": "Name is required.", "code": "MISSING_REQUIRED", "loc": ["name"]}],
+        )
+
+    @test_app.post("/raise-starlette/")
+    async def raise_starlette():
+        raise StarletteHTTPException(status_code=409, detail="Slug taken")
+
+    return TestClient(test_app)
+
+
+ERROR_PAYLOAD = {"name": "", "slug": "taken"}
+
+
+@pytest.mark.parametrize("method", ["post", "put", "patch"])
+@pytest.mark.parametrize("status_code", [400, 409, 422])
+def test_http_exception_on_write_echoes_payload(http_error_client, method, status_code):
+    """Test that 400, 409 and 422 on a write return the submitted payload."""
+    response = getattr(http_error_client, method)(
+        f"/raise/{status_code}/", json=ERROR_PAYLOAD
+    )
+
+    assert response.status_code == status_code
+    result = response.json()
+    assert result["data"] == ERROR_PAYLOAD
+    assert result["errors"][0]["field"] == "name"
+
+
+def test_http_exception_on_write_echoes_form_payload(http_error_client):
+    """Test that form submissions are echoed the same way as JSON."""
+    response = http_error_client.post("/raise/409/", data={"slug": "taken"})
+
+    assert response.json()["data"] == {"slug": "taken"}
+
+
+@pytest.mark.parametrize("status_code", [401, 403, 404])
+def test_http_exception_other_status_has_null_data(http_error_client, status_code):
+    """Test that statuses outside 400, 409 and 422 do not echo the payload."""
+    response = http_error_client.post(f"/raise/{status_code}/", json=ERROR_PAYLOAD)
+
+    assert response.status_code == status_code
+    assert response.json()["data"] is None
+
+
+def test_http_exception_on_read_has_null_data(http_error_client):
+    """Test that a 400 on a GET does not echo anything."""
+    response = http_error_client.get("/raise/400/")
+
+    assert response.json()["data"] is None
+
+
+def test_starlette_http_exception_on_write_echoes_payload(http_error_client):
+    """Test that Starlette's HTTPException follows the same echo rule."""
+    response = http_error_client.post("/raise-starlette/", json=ERROR_PAYLOAD)
+
+    assert response.status_code == 409
+    assert response.json()["data"] == ERROR_PAYLOAD
