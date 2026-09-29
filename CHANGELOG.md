@@ -23,6 +23,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `configure_role_permissions` maps a role to a fixed permission list. `require_permission` and `require_combined_permission` both consult it. `superuser` still grants every permission. Token claims are left unchanged.
 
+## [0.12.15] - 2026-08-18
+
+### Fixed
+
+- `meta.timestamp` in the response envelope now uses `datetime_now_sec`, matching the second precision of record timestamps. It no longer carries microseconds. Use `meta.request_id` if you relied on it for sub-second ordering or uniqueness.
+
+## [0.12.14] - 2026-08-18
+
+### Added
+
+- `fastapi_sdk.utils.claims` with `claims_user_id` (reads `sub`) and `claims_user_name` (first and last name, falling back to email). Both accept `None` and return `""` instead of raising when claims are missing.
+
 ## [0.12.13] - 2026-08-05
 
 ### Changed
