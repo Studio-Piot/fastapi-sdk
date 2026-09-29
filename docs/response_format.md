@@ -141,7 +141,7 @@ Example (returning a list of Users with pagination metadata)
 
 ### ⚠️ 400 Bad Request — Validation / Client Error
 
-Example (missing or invalid fields)
+Example (missing or invalid fields on a `POST /users`)
 
 ```json
 {
@@ -149,7 +149,10 @@ Example (missing or invalid fields)
     "code": 400,
     "message": "Bad Request"
   },
-  "data": null,
+  "data": {
+    "email": "not-an-email",
+    "password": "short"
+  },
   "errors": [
     {
       "field": "email",
@@ -203,7 +206,9 @@ Example (Pydantic validation errors with original payload)
 }
 ```
 
-**Note:** For validation errors (422), the `data` field contains the original payload that was submitted, so the client can re-hydrate the form alongside its errors. This holds whether FastAPI rejects the request body or a controller raises a pydantic `ValidationError` (for example `ModelController.create` validating a `dict`). JSON bodies are echoed as sent. Form bodies become an object, where repeated keys become lists and files become their filename.
+**Note:** For validation errors (422), the `data` field contains the original payload that was submitted, so the client can re-hydrate the form alongside its errors. This holds whether FastAPI rejects the request body or a controller raises a pydantic `ValidationError` (for example `ModelController.create` validating a `dict`).
+
+The same applies to an `HTTPException` with status **400, 409 or 422** raised during a **POST, PUT or PATCH**, for example from a controller hook rejecting a field or a duplicate slug. Every other error keeps `data: null`, including 401, 403, 404 and any error on a GET or DELETE. JSON bodies are echoed as sent. Form bodies become an object, where repeated keys become lists and files become their filename.
 
 ### 💥 500 Internal Server Error — Unexpected Failure
 

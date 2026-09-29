@@ -23,6 +23,11 @@ logger = logging.getLogger("fastapi_sdk.errors")
 
 ExceptionHandler = Callable[[Request, Any], Awaitable[JSONResponse]]
 
+# An HTTP error on a write echoes the submitted payload in `data` for these
+# statuses, so the client can refill the form alongside the errors.
+PAYLOAD_ECHO_STATUS_CODES = frozenset({400, 409, 422})
+PAYLOAD_ECHO_METHODS = frozenset({"POST", "PUT", "PATCH"})
+
 # Field names whose values are masked in debug logs of error responses.
 # A key matches when it contains one of these, ignoring case, "_" and "-",
 # so "password" also covers "new_password" and "passwordConfirmation".
@@ -89,6 +94,7 @@ async def http_exception_handler(request: Request, exc: HTTPException) -> JSONRe
         errors=errors,
         status_code=exc.status_code,
         request_id=request_id,
+        data=await _echo_payload(request, exc.status_code),
     )
     return JSONResponse(status_code=exc.status_code, content=response)
 
@@ -158,6 +164,16 @@ def _mask_sensitive(body: Any, sensitive_fields: Iterable[str]) -> Any:
 
 def _get_sensitive_fields(request: Request) -> Iterable[str]:
     return getattr(request.app.state, "sensitive_fields", DEFAULT_SENSITIVE_FIELDS)
+
+
+async def _echo_payload(request: Request, status_code: int) -> Any:
+    """Return the submitted body for a failed write with an echo status, else None."""
+    if (
+        status_code in PAYLOAD_ECHO_STATUS_CODES
+        and request.method in PAYLOAD_ECHO_METHODS
+    ):
+        return await _read_request_body(request)
+    return None
 
 
 def _format_validation_errors(
@@ -265,6 +281,7 @@ async def starlette_exception_handler(
         errors=errors,
         status_code=exc.status_code,
         request_id=request_id,
+        data=await _echo_payload(request, exc.status_code),
     )
     return JSONResponse(status_code=exc.status_code, content=response)
 
