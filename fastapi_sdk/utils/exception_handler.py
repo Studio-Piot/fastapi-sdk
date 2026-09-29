@@ -4,11 +4,11 @@ import json
 import logging
 from typing import Any, Awaitable, Callable, Iterable, Optional
 
-from fastapi import FastAPI, HTTPException, Request, UploadFile
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from pydantic import ValidationError
-from starlette.datastructures import FormData
+from starlette.datastructures import FormData, UploadFile
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from fastapi_sdk.utils.constants import ErrorCode
@@ -104,6 +104,8 @@ def _serialize_body(body: Any) -> Any:
 
     Form bodies become a dict (repeated keys become lists, files become their
     filename) and raw bytes are decoded, so the payload can be echoed back.
+    Files are matched on Starlette's ``UploadFile``: the form parser creates
+    that class, and ``fastapi.UploadFile`` is only a subclass of it.
     """
     if isinstance(body, FormData):
         result: dict[str, Any] = {}

@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.12.19] - 2026-09-29
+
+### Fixed
+
+- A rejected file upload (400, 409 or 422) no longer crashes with `Object of type UploadFile is not JSON serializable`. Uploaded files are echoed in `data` as their filename. The check matched `fastapi.UploadFile`, but the form parser creates Starlette's `UploadFile`, its parent class.
+
 ## [0.12.18] - 2026-09-29
 
 ### Fixed

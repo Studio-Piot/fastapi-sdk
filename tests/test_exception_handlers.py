@@ -1,7 +1,7 @@
 """Tests for exception handlers."""
 
 import pytest
-from fastapi import FastAPI, Form, HTTPException
+from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.testclient import TestClient
 from pydantic import BaseModel, Field
 from starlette.exceptions import HTTPException as StarletteHTTPException
@@ -346,6 +346,10 @@ def http_error_client():
             detail=[{"msg": "Name is required.", "code": "MISSING_REQUIRED", "loc": ["name"]}],
         )
 
+    @test_app.post("/upload/")
+    async def upload(file: UploadFile = File(...), alt: str = Form("")):
+        raise HTTPException(status_code=400, detail="Image is too small.")
+
     @test_app.post("/raise-starlette/")
     async def raise_starlette():
         raise StarletteHTTPException(status_code=409, detail="Slug taken")
@@ -399,3 +403,15 @@ def test_starlette_http_exception_on_write_echoes_payload(http_error_client):
 
     assert response.status_code == 409
     assert response.json()["data"] == ERROR_PAYLOAD
+
+
+def test_http_exception_on_upload_echoes_filename(http_error_client):
+    """Test that a failed upload echoes the filename, not the file object."""
+    response = http_error_client.post(
+        "/upload/",
+        files={"file": ("icon.png", b"\x89PNG", "image/png")},
+        data={"alt": "Icon"},
+    )
+
+    assert response.status_code == 400
+    assert response.json()["data"] == {"file": "icon.png", "alt": "Icon"}
