@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.12.17] - 2026-09-29
+
+### Added
+
+- `register_exception_handlers(app, debug=True)` logs every error response (method, path, status, JSON body) to the `fastapi_sdk.errors` logger.
+
+### Fixed
+
+- 422 responses now return the submitted payload in `data` when a controller raises a pydantic `ValidationError`. Previously `data` was `null`.
+- Form submissions that fail validation now return a 422 with the form fields in `data`. Previously they caused a 500 because `FormData` is not JSON serializable.
+
 ## [0.12.16] - 2026-09-26
 
 ### Added
