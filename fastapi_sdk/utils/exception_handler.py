@@ -23,7 +23,7 @@ logger = logging.getLogger("fastapi_sdk.errors")
 
 ExceptionHandler = Callable[[Request, Any], Awaitable[JSONResponse]]
 
-# Field names whose values are nulled before a payload is echoed in a 422.
+# Field names whose values are masked in debug logs of error responses.
 # A key matches when it contains one of these, ignoring case, "_" and "-",
 # so "password" also covers "new_password" and "passwordConfirmation".
 DEFAULT_SENSITIVE_FIELDS = frozenset(
@@ -133,11 +133,7 @@ def _normalize_key(key: str) -> str:
 
 
 def _mask_sensitive(body: Any, sensitive_fields: Iterable[str]) -> Any:
-    """Null the values of sensitive keys in a payload, recursing into dicts and lists.
-
-    Values are nulled rather than replaced with a placeholder, so a client that
-    re-hydrates a form from the payload leaves those inputs empty.
-    """
+    """Mask the values of sensitive keys, recursing into dicts and lists."""
     fragments = [_normalize_key(field) for field in sensitive_fields]
     if not fragments:
         return body
@@ -146,7 +142,7 @@ def _mask_sensitive(body: Any, sensitive_fields: Iterable[str]) -> Any:
         if isinstance(value, dict):
             return {
                 key: (
-                    None
+                    "***"
                     if isinstance(key, str)
                     and any(f in _normalize_key(key) for f in fragments)
                     else mask(item)
@@ -227,9 +223,7 @@ async def validation_exception_handler(
         JSONResponse with standardized format
     """
     request_id = get_request_id(request)
-    original_body = _mask_sensitive(
-        _serialize_body(getattr(exc, "body", None)), _get_sensitive_fields(request)
-    )
+    original_body = _serialize_body(getattr(exc, "body", None))
     return _format_validation_errors(exc.errors(), request_id, original_body)
 
 
@@ -246,9 +240,7 @@ async def pydantic_validation_exception_handler(
         JSONResponse with standardized format
     """
     request_id = get_request_id(request)
-    original_body = _mask_sensitive(
-        await _read_request_body(request), _get_sensitive_fields(request)
-    )
+    original_body = await _read_request_body(request)
     return _format_validation_errors(exc.errors(), request_id, original_body)
 
 
@@ -278,11 +270,17 @@ async def starlette_exception_handler(
 
 
 def _with_debug_logging(handler: ExceptionHandler) -> ExceptionHandler:
-    """Wrap an exception handler so it logs the response it returns."""
+    """Wrap an exception handler so it logs the response it returns.
+
+    Sensitive values are masked in the log only; the response is unchanged.
+    """
 
     async def wrapper(request: Request, exc: Any) -> JSONResponse:
         response = await handler(request, exc)
-        body = json.dumps(json.loads(response.body), indent=2)
+        body = json.dumps(
+            _mask_sensitive(json.loads(response.body), _get_sensitive_fields(request)),
+            indent=2,
+        )
         logger.warning(
             "%s %s -> %s\n%s",
             request.method,
@@ -307,10 +305,11 @@ def register_exception_handlers(
         debug: Log every error response to the ``fastapi_sdk.errors`` logger
             (method, path, status and the full JSON body). Keep off in production,
             as the body can include submitted payloads.
-        sensitive_fields: Field names whose values are nulled when a 422 echoes
-            the submitted payload. Replaces ``DEFAULT_SENSITIVE_FIELDS``; extend
-            it with ``DEFAULT_SENSITIVE_FIELDS | {"iban"}``. Pass an empty set
-            to echo every value.
+        sensitive_fields: Field names whose values are masked as ``"***"`` in the
+            debug log. Responses are never masked. Replaces
+            ``DEFAULT_SENSITIVE_FIELDS``; extend it with
+            ``DEFAULT_SENSITIVE_FIELDS | {"iban"}``. Pass an empty set to log
+            every value.
     """
     app.state.sensitive_fields = frozenset(
         DEFAULT_SENSITIVE_FIELDS if sensitive_fields is None else sensitive_fields

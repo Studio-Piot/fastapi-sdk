@@ -205,19 +205,6 @@ Example (Pydantic validation errors with original payload)
 
 **Note:** For validation errors (422), the `data` field contains the original payload that was submitted, so the client can re-hydrate the form alongside its errors. This holds whether FastAPI rejects the request body or a controller raises a pydantic `ValidationError` (for example `ModelController.create` validating a `dict`). JSON bodies are echoed as sent. Form bodies become an object, where repeated keys become lists and files become their filename.
 
-Sensitive values are set to `null` before the payload is echoed, at any depth. A key is sensitive when it contains `password`, `secret`, `token`, `api_key`, `card_number`, `cvv` or `cvc`. Matching ignores case, `_` and `-`, so `new_password` and `clientSecret` are masked too. Values become `null` rather than a placeholder, so a re-hydrated form leaves those inputs empty instead of resubmitting a placeholder. To change the list:
-
-```python
-from fastapi_sdk.utils.exception_handler import (
-    DEFAULT_SENSITIVE_FIELDS,
-    register_exception_handlers,
-)
-
-register_exception_handlers(app, sensitive_fields=DEFAULT_SENSITIVE_FIELDS | {"iban"})
-```
-
-`sensitive_fields` replaces the defaults. Pass an empty set to echo every value.
-
 ### 💥 500 Internal Server Error — Unexpected Failure
 
 Example (generic safe message)
@@ -252,4 +239,19 @@ from fastapi_sdk.utils.exception_handler import register_exception_handlers
 register_exception_handlers(app, debug=settings.DEBUG)
 ```
 
-Keep it off in production: 422 bodies include the submitted payload, which may contain personal data.
+Sensitive values in the logged body are replaced with `"***"`, at any depth. A key is sensitive when it contains `password`, `secret`, `token`, `api_key`, `card_number`, `cvv` or `cvc`. Matching ignores case, `_` and `-`, so `new_password` and `clientSecret` are masked too. Only the log is masked: the response still returns every submitted value so the form can be refilled. To change the list:
+
+```python
+from fastapi_sdk.utils.exception_handler import (
+    DEFAULT_SENSITIVE_FIELDS,
+    register_exception_handlers,
+)
+
+register_exception_handlers(
+    app, debug=settings.DEBUG, sensitive_fields=DEFAULT_SENSITIVE_FIELDS | {"iban"}
+)
+```
+
+`sensitive_fields` replaces the defaults. Pass an empty set to log every value.
+
+Keep debug mode off in production: 422 bodies include the rest of the submitted payload, which may contain personal data.

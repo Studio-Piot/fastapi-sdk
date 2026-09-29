@@ -10,7 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - `register_exception_handlers(app, debug=True)` logs every error response (method, path, status, JSON body) to the `fastapi_sdk.errors` logger.
-- A 422 that echoes the submitted payload sets sensitive values (`password`, `secret`, `token`, `api_key`, `card_number`, `cvv`, `cvc`, including nested keys) to `null`. The list is set through `register_exception_handlers(app, sensitive_fields=...)`.
+- The debug log masks sensitive values (`password`, `secret`, `token`, `api_key`, `card_number`, `cvv`, `cvc`, including nested keys) as `"***"`. Responses are not masked. The list is set through `register_exception_handlers(app, sensitive_fields=...)`.
 
 ### Fixed
 
