@@ -2,10 +2,11 @@
 
 from typing import Any, Optional
 
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Request, UploadFile
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from pydantic import ValidationError
+from starlette.datastructures import FormData
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from fastapi_sdk.utils.constants import ErrorCode
@@ -79,6 +80,41 @@ async def http_exception_handler(request: Request, exc: HTTPException) -> JSONRe
     return JSONResponse(status_code=exc.status_code, content=response)
 
 
+def _serialize_body(body: Any) -> Any:
+    """Convert a request body into a JSON-serializable value.
+
+    Form bodies become a dict (repeated keys become lists, files become their
+    filename) and raw bytes are decoded, so the payload can be echoed back.
+    """
+    if isinstance(body, FormData):
+        result: dict[str, Any] = {}
+        for key in body.keys():
+            values = [
+                value.filename if isinstance(value, UploadFile) else value
+                for value in body.getlist(key)
+            ]
+            result[key] = values[0] if len(values) == 1 else values
+        return result
+    if isinstance(body, bytes):
+        return body.decode("utf-8", errors="replace")
+    return body
+
+
+async def _read_request_body(request: Request) -> Any:
+    """Read the submitted body back from the request, or None if unavailable."""
+    content_type = request.headers.get("content-type", "")
+    try:
+        if content_type.startswith("application/json"):
+            return await request.json()
+        if content_type.startswith(
+            ("multipart/form-data", "application/x-www-form-urlencoded")
+        ):
+            return _serialize_body(await request.form())
+    except Exception:  # pylint: disable=broad-except
+        return None
+    return None
+
+
 def _format_validation_errors(
     error_list: list[dict[str, Any]],
     request_id: Optional[str] = None,
@@ -142,7 +178,7 @@ async def validation_exception_handler(
         JSONResponse with standardized format
     """
     request_id = get_request_id(request)
-    original_body = getattr(exc, "body", None)
+    original_body = _serialize_body(getattr(exc, "body", None))
     return _format_validation_errors(exc.errors(), request_id, original_body)
 
 
@@ -159,7 +195,8 @@ async def pydantic_validation_exception_handler(
         JSONResponse with standardized format
     """
     request_id = get_request_id(request)
-    return _format_validation_errors(exc.errors(), request_id)
+    original_body = await _read_request_body(request)
+    return _format_validation_errors(exc.errors(), request_id, original_body)
 
 
 async def starlette_exception_handler(

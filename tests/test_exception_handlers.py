@@ -1,7 +1,7 @@
 """Tests for exception handlers."""
 
 import pytest
-from fastapi import FastAPI
+from fastapi import FastAPI, Form
 from fastapi.testclient import TestClient
 from pydantic import BaseModel, Field
 
@@ -30,6 +30,19 @@ def app():
     async def create_user_manual(payload: dict):
         # Raise bare pydantic.ValidationError (not RequestValidationError)
         user = UserCreate.model_validate(payload)
+        return {"message": "User created", "user": user.model_dump()}
+
+    @test_app.post("/users/form/")
+    async def create_user_form(
+        name: str = Form(..., min_length=1),
+        age: int = Form(...),
+    ):
+        return {"name": name, "age": age}
+
+    @test_app.post("/users/form/manual/")
+    async def create_user_form_manual(name: str = Form(""), age: str = Form("")):
+        # Raise bare pydantic.ValidationError from form input
+        user = UserCreate.model_validate({"name": name, "email": "", "age": age})
         return {"message": "User created", "user": user.model_dump()}
 
     return test_app
@@ -202,5 +215,27 @@ def test_pydantic_validation_error(client):
     assert "email" in error_fields
     assert "age" in error_fields
 
-    # Bare ValidationError has no request body attached
-    assert result.get("data") is None
+    # The submitted payload is read back from the request
+    assert result["data"] == invalid_data
+
+
+def test_form_validation_error_includes_original_payload(client):
+    """Test that form validation errors return 422 with the submitted form data."""
+    response = client.post("/users/form/", data={"name": "", "age": "not-a-number"})
+
+    assert response.status_code == 422
+    result = response.json()
+    assert result["status"]["code"] == 422
+    assert result["data"] == {"name": "", "age": "not-a-number"}
+    assert {error["field"] for error in result["errors"]} == {"name", "age"}
+
+
+def test_pydantic_validation_error_with_form_payload(client):
+    """Test that bare pydantic.ValidationError returns submitted form data."""
+    response = client.post(
+        "/users/form/manual/", data={"name": "", "age": "not-a-number"}
+    )
+
+    assert response.status_code == 422
+    result = response.json()
+    assert result["data"] == {"name": "", "age": "not-a-number"}
