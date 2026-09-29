@@ -203,7 +203,7 @@ Example (Pydantic validation errors with original payload)
 }
 ```
 
-**Note:** For validation errors (422), the `data` field contains the original payload that was submitted, making it easier to debug and provide user feedback.
+**Note:** For validation errors (422), the `data` field contains the original payload that was submitted, so the client can re-hydrate the form alongside its errors. This holds whether FastAPI rejects the request body or a controller raises a pydantic `ValidationError` (for example `ModelController.create` validating a `dict`). JSON bodies are echoed as sent. Form bodies become an object, where repeated keys become lists and files become their filename.
 
 ### 💥 500 Internal Server Error — Unexpected Failure
 
@@ -229,3 +229,29 @@ Example (generic safe message)
   }
 }
 ```
+## Debugging error responses
+
+Pass `debug=True` to `register_exception_handlers` to log every error response to the `fastapi_sdk.errors` logger at `WARNING` level. Each entry has the method, path, status and pretty-printed JSON body:
+
+```python
+from fastapi_sdk.utils.exception_handler import register_exception_handlers
+
+register_exception_handlers(app, debug=settings.DEBUG)
+```
+
+Sensitive values in the logged body are replaced with `"***"`, at any depth. A key is sensitive when it contains `password`, `secret`, `token`, `api_key`, `card_number`, `cvv` or `cvc`. Matching ignores case, `_` and `-`, so `new_password` and `clientSecret` are masked too. Only the log is masked: the response still returns every submitted value so the form can be refilled. To change the list:
+
+```python
+from fastapi_sdk.utils.exception_handler import (
+    DEFAULT_SENSITIVE_FIELDS,
+    register_exception_handlers,
+)
+
+register_exception_handlers(
+    app, debug=settings.DEBUG, sensitive_fields=DEFAULT_SENSITIVE_FIELDS | {"iban"}
+)
+```
+
+`sensitive_fields` replaces the defaults. Pass an empty set to log every value.
+
+Keep debug mode off in production: 422 bodies include the rest of the submitted payload, which may contain personal data.

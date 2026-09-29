@@ -1,7 +1,7 @@
 """Tests for exception handlers."""
 
 import pytest
-from fastapi import FastAPI
+from fastapi import FastAPI, Form
 from fastapi.testclient import TestClient
 from pydantic import BaseModel, Field
 
@@ -30,6 +30,19 @@ def app():
     async def create_user_manual(payload: dict):
         # Raise bare pydantic.ValidationError (not RequestValidationError)
         user = UserCreate.model_validate(payload)
+        return {"message": "User created", "user": user.model_dump()}
+
+    @test_app.post("/users/form/")
+    async def create_user_form(
+        name: str = Form(..., min_length=1),
+        age: int = Form(...),
+    ):
+        return {"name": name, "age": age}
+
+    @test_app.post("/users/form/manual/")
+    async def create_user_form_manual(name: str = Form(""), age: str = Form("")):
+        # Raise bare pydantic.ValidationError from form input
+        user = UserCreate.model_validate({"name": name, "email": "", "age": age})
         return {"message": "User created", "user": user.model_dump()}
 
     return test_app
@@ -202,5 +215,118 @@ def test_pydantic_validation_error(client):
     assert "email" in error_fields
     assert "age" in error_fields
 
-    # Bare ValidationError has no request body attached
-    assert result.get("data") is None
+    # The submitted payload is read back from the request
+    assert result["data"] == invalid_data
+
+
+def test_form_validation_error_includes_original_payload(client):
+    """Test that form validation errors return 422 with the submitted form data."""
+    response = client.post("/users/form/", data={"name": "", "age": "not-a-number"})
+
+    assert response.status_code == 422
+    result = response.json()
+    assert result["status"]["code"] == 422
+    assert result["data"] == {"name": "", "age": "not-a-number"}
+    assert {error["field"] for error in result["errors"]} == {"name", "age"}
+
+
+def test_pydantic_validation_error_with_form_payload(client):
+    """Test that bare pydantic.ValidationError returns submitted form data."""
+    response = client.post(
+        "/users/form/manual/", data={"name": "", "age": "not-a-number"}
+    )
+
+    assert response.status_code == 422
+    result = response.json()
+    assert result["data"] == {"name": "", "age": "not-a-number"}
+
+
+def _debug_app(debug: bool) -> FastAPI:
+    test_app = FastAPI()
+    register_exception_handlers(test_app, debug=debug)
+
+    @test_app.post("/users/")
+    async def create_user(user: UserCreate):
+        return user.model_dump()
+
+    return test_app
+
+
+def test_debug_mode_logs_error_responses(caplog):
+    """Test that debug mode logs the method, path, status and response body."""
+    client = TestClient(_debug_app(debug=True))
+
+    with caplog.at_level("WARNING", logger="fastapi_sdk.errors"):
+        client.post("/users/", json={"name": "", "email": "x", "age": 1})
+
+    records = [r for r in caplog.records if r.name == "fastapi_sdk.errors"]
+    assert len(records) == 1
+    message = records[0].getMessage()
+    assert "POST /users/ -> 422" in message
+    assert '"email": "x"' in message
+
+
+def test_error_responses_not_logged_by_default(caplog):
+    """Test that error responses are not logged unless debug mode is on."""
+    client = TestClient(_debug_app(debug=False))
+
+    with caplog.at_level("DEBUG", logger="fastapi_sdk.errors"):
+        client.post("/users/", json={"name": "", "email": "x", "age": 1})
+
+    assert not [r for r in caplog.records if r.name == "fastapi_sdk.errors"]
+
+
+
+class SignupCreate(BaseModel):
+    """Signup schema with sensitive fields for masking tests."""
+
+    email: str = Field(..., pattern=r"^[\w\.-]+@[\w\.-]+\.\w+$")
+    password: str = Field(..., min_length=8)
+    billing: dict
+
+
+def _signup_app(**kwargs) -> FastAPI:
+    test_app = FastAPI()
+    register_exception_handlers(test_app, **kwargs)
+
+    @test_app.post("/signup/")
+    async def signup(data: SignupCreate):
+        return data.model_dump()
+
+    return test_app
+
+
+SIGNUP_PAYLOAD = {
+    "email": "not-an-email",
+    "password": "hunter2",
+    "billing": {"card_number": "4242424242424242", "Client-Secret": "s3", "city": "X"},
+}
+
+
+def _signup_log(caplog, **kwargs) -> tuple[dict, str]:
+    client = TestClient(_signup_app(debug=True, **kwargs))
+    with caplog.at_level("WARNING", logger="fastapi_sdk.errors"):
+        response = client.post("/signup/", json=SIGNUP_PAYLOAD)
+    records = [r for r in caplog.records if r.name == "fastapi_sdk.errors"]
+    return response.json(), records[0].getMessage()
+
+
+def test_debug_log_masks_sensitive_fields_but_response_does_not(caplog):
+    """Test that sensitive values are masked in the log but echoed in the response."""
+    result, message = _signup_log(caplog)
+
+    assert result["data"] == SIGNUP_PAYLOAD
+    assert '"password": "***"' in message
+    assert '"card_number": "***"' in message
+    assert '"Client-Secret": "***"' in message
+    assert '"city": "X"' in message
+    for secret in ("hunter2", "4242424242424242", "s3"):
+        assert secret not in message
+
+
+def test_debug_log_masks_custom_sensitive_fields(caplog):
+    """Test that a custom sensitive_fields list replaces the defaults."""
+    _, message = _signup_log(caplog, sensitive_fields={"email"})
+
+    assert '"email": "***"' in message
+    assert '"password": "hunter2"' in message

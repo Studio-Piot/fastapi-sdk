@@ -1,11 +1,14 @@
 """Exception handlers for FastAPI to format responses consistently."""
 
-from typing import Any, Optional
+import json
+import logging
+from typing import Any, Awaitable, Callable, Iterable, Optional
 
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Request, UploadFile
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from pydantic import ValidationError
+from starlette.datastructures import FormData
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from fastapi_sdk.utils.constants import ErrorCode
@@ -15,6 +18,17 @@ from fastapi_sdk.utils.response import create_error_response, create_single_erro
 # Define the new constant to avoid deprecation warning
 # HTTP_422_UNPROCESSABLE_ENTITY is deprecated in favor of HTTP_422_UNPROCESSABLE_CONTENT
 HTTP_422_UNPROCESSABLE_CONTENT = 422
+
+logger = logging.getLogger("fastapi_sdk.errors")
+
+ExceptionHandler = Callable[[Request, Any], Awaitable[JSONResponse]]
+
+# Field names whose values are masked in debug logs of error responses.
+# A key matches when it contains one of these, ignoring case, "_" and "-",
+# so "password" also covers "new_password" and "passwordConfirmation".
+DEFAULT_SENSITIVE_FIELDS = frozenset(
+    {"password", "secret", "token", "api_key", "card_number", "cvv", "cvc"}
+)
 
 
 async def http_exception_handler(request: Request, exc: HTTPException) -> JSONResponse:
@@ -77,6 +91,73 @@ async def http_exception_handler(request: Request, exc: HTTPException) -> JSONRe
         request_id=request_id,
     )
     return JSONResponse(status_code=exc.status_code, content=response)
+
+
+def _serialize_body(body: Any) -> Any:
+    """Convert a request body into a JSON-serializable value.
+
+    Form bodies become a dict (repeated keys become lists, files become their
+    filename) and raw bytes are decoded, so the payload can be echoed back.
+    """
+    if isinstance(body, FormData):
+        result: dict[str, Any] = {}
+        for key in body.keys():
+            values = [
+                value.filename if isinstance(value, UploadFile) else value
+                for value in body.getlist(key)
+            ]
+            result[key] = values[0] if len(values) == 1 else values
+        return result
+    if isinstance(body, bytes):
+        return body.decode("utf-8", errors="replace")
+    return body
+
+
+async def _read_request_body(request: Request) -> Any:
+    """Read the submitted body back from the request, or None if unavailable."""
+    content_type = request.headers.get("content-type", "")
+    try:
+        if content_type.startswith("application/json"):
+            return await request.json()
+        if content_type.startswith(
+            ("multipart/form-data", "application/x-www-form-urlencoded")
+        ):
+            return _serialize_body(await request.form())
+    except Exception:  # pylint: disable=broad-except
+        return None
+    return None
+
+
+def _normalize_key(key: str) -> str:
+    return key.lower().replace("_", "").replace("-", "")
+
+
+def _mask_sensitive(body: Any, sensitive_fields: Iterable[str]) -> Any:
+    """Mask the values of sensitive keys, recursing into dicts and lists."""
+    fragments = [_normalize_key(field) for field in sensitive_fields]
+    if not fragments:
+        return body
+
+    def mask(value: Any) -> Any:
+        if isinstance(value, dict):
+            return {
+                key: (
+                    "***"
+                    if isinstance(key, str)
+                    and any(f in _normalize_key(key) for f in fragments)
+                    else mask(item)
+                )
+                for key, item in value.items()
+            }
+        if isinstance(value, list):
+            return [mask(item) for item in value]
+        return value
+
+    return mask(body)
+
+
+def _get_sensitive_fields(request: Request) -> Iterable[str]:
+    return getattr(request.app.state, "sensitive_fields", DEFAULT_SENSITIVE_FIELDS)
 
 
 def _format_validation_errors(
@@ -142,7 +223,7 @@ async def validation_exception_handler(
         JSONResponse with standardized format
     """
     request_id = get_request_id(request)
-    original_body = getattr(exc, "body", None)
+    original_body = _serialize_body(getattr(exc, "body", None))
     return _format_validation_errors(exc.errors(), request_id, original_body)
 
 
@@ -159,7 +240,8 @@ async def pydantic_validation_exception_handler(
         JSONResponse with standardized format
     """
     request_id = get_request_id(request)
-    return _format_validation_errors(exc.errors(), request_id)
+    original_body = await _read_request_body(request)
+    return _format_validation_errors(exc.errors(), request_id, original_body)
 
 
 async def starlette_exception_handler(
@@ -187,13 +269,58 @@ async def starlette_exception_handler(
     return JSONResponse(status_code=exc.status_code, content=response)
 
 
-def register_exception_handlers(app: FastAPI) -> None:
+def _with_debug_logging(handler: ExceptionHandler) -> ExceptionHandler:
+    """Wrap an exception handler so it logs the response it returns.
+
+    Sensitive values are masked in the log only; the response is unchanged.
+    """
+
+    async def wrapper(request: Request, exc: Any) -> JSONResponse:
+        response = await handler(request, exc)
+        body = json.dumps(
+            _mask_sensitive(json.loads(response.body), _get_sensitive_fields(request)),
+            indent=2,
+        )
+        logger.warning(
+            "%s %s -> %s\n%s",
+            request.method,
+            request.url.path,
+            response.status_code,
+            body,
+        )
+        return response
+
+    return wrapper
+
+
+def register_exception_handlers(
+    app: FastAPI,
+    debug: bool = False,
+    sensitive_fields: Optional[Iterable[str]] = None,
+) -> None:
     """Register all exception handlers with the FastAPI app.
 
     Args:
         app: The FastAPI application instance
+        debug: Log every error response to the ``fastapi_sdk.errors`` logger
+            (method, path, status and the full JSON body). Keep off in production,
+            as the body can include submitted payloads.
+        sensitive_fields: Field names whose values are masked as ``"***"`` in the
+            debug log. Responses are never masked. Replaces
+            ``DEFAULT_SENSITIVE_FIELDS``; extend it with
+            ``DEFAULT_SENSITIVE_FIELDS | {"iban"}``. Pass an empty set to log
+            every value.
     """
-    app.add_exception_handler(HTTPException, http_exception_handler)
-    app.add_exception_handler(RequestValidationError, validation_exception_handler)
-    app.add_exception_handler(ValidationError, pydantic_validation_exception_handler)
-    app.add_exception_handler(StarletteHTTPException, starlette_exception_handler)
+    app.state.sensitive_fields = frozenset(
+        DEFAULT_SENSITIVE_FIELDS if sensitive_fields is None else sensitive_fields
+    )
+    handlers: list[tuple[type[Exception], ExceptionHandler]] = [
+        (HTTPException, http_exception_handler),
+        (RequestValidationError, validation_exception_handler),
+        (ValidationError, pydantic_validation_exception_handler),
+        (StarletteHTTPException, starlette_exception_handler),
+    ]
+    for exc_class, handler in handlers:
+        if debug:
+            handler = _with_debug_logging(handler)
+        app.add_exception_handler(exc_class, handler)
