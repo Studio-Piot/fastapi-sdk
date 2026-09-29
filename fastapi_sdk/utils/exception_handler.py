@@ -2,7 +2,7 @@
 
 import json
 import logging
-from typing import Any, Awaitable, Callable, Optional
+from typing import Any, Awaitable, Callable, Iterable, Optional
 
 from fastapi import FastAPI, HTTPException, Request, UploadFile
 from fastapi.exceptions import RequestValidationError
@@ -22,6 +22,13 @@ HTTP_422_UNPROCESSABLE_CONTENT = 422
 logger = logging.getLogger("fastapi_sdk.errors")
 
 ExceptionHandler = Callable[[Request, Any], Awaitable[JSONResponse]]
+
+# Field names whose values are nulled before a payload is echoed in a 422.
+# A key matches when it contains one of these, ignoring case, "_" and "-",
+# so "password" also covers "new_password" and "passwordConfirmation".
+DEFAULT_SENSITIVE_FIELDS = frozenset(
+    {"password", "secret", "token", "api_key", "card_number", "cvv", "cvc"}
+)
 
 
 async def http_exception_handler(request: Request, exc: HTTPException) -> JSONResponse:
@@ -121,6 +128,42 @@ async def _read_request_body(request: Request) -> Any:
     return None
 
 
+def _normalize_key(key: str) -> str:
+    return key.lower().replace("_", "").replace("-", "")
+
+
+def _mask_sensitive(body: Any, sensitive_fields: Iterable[str]) -> Any:
+    """Null the values of sensitive keys in a payload, recursing into dicts and lists.
+
+    Values are nulled rather than replaced with a placeholder, so a client that
+    re-hydrates a form from the payload leaves those inputs empty.
+    """
+    fragments = [_normalize_key(field) for field in sensitive_fields]
+    if not fragments:
+        return body
+
+    def mask(value: Any) -> Any:
+        if isinstance(value, dict):
+            return {
+                key: (
+                    None
+                    if isinstance(key, str)
+                    and any(f in _normalize_key(key) for f in fragments)
+                    else mask(item)
+                )
+                for key, item in value.items()
+            }
+        if isinstance(value, list):
+            return [mask(item) for item in value]
+        return value
+
+    return mask(body)
+
+
+def _get_sensitive_fields(request: Request) -> Iterable[str]:
+    return getattr(request.app.state, "sensitive_fields", DEFAULT_SENSITIVE_FIELDS)
+
+
 def _format_validation_errors(
     error_list: list[dict[str, Any]],
     request_id: Optional[str] = None,
@@ -184,7 +227,9 @@ async def validation_exception_handler(
         JSONResponse with standardized format
     """
     request_id = get_request_id(request)
-    original_body = _serialize_body(getattr(exc, "body", None))
+    original_body = _mask_sensitive(
+        _serialize_body(getattr(exc, "body", None)), _get_sensitive_fields(request)
+    )
     return _format_validation_errors(exc.errors(), request_id, original_body)
 
 
@@ -201,7 +246,9 @@ async def pydantic_validation_exception_handler(
         JSONResponse with standardized format
     """
     request_id = get_request_id(request)
-    original_body = await _read_request_body(request)
+    original_body = _mask_sensitive(
+        await _read_request_body(request), _get_sensitive_fields(request)
+    )
     return _format_validation_errors(exc.errors(), request_id, original_body)
 
 
@@ -248,7 +295,11 @@ def _with_debug_logging(handler: ExceptionHandler) -> ExceptionHandler:
     return wrapper
 
 
-def register_exception_handlers(app: FastAPI, debug: bool = False) -> None:
+def register_exception_handlers(
+    app: FastAPI,
+    debug: bool = False,
+    sensitive_fields: Optional[Iterable[str]] = None,
+) -> None:
     """Register all exception handlers with the FastAPI app.
 
     Args:
@@ -256,7 +307,14 @@ def register_exception_handlers(app: FastAPI, debug: bool = False) -> None:
         debug: Log every error response to the ``fastapi_sdk.errors`` logger
             (method, path, status and the full JSON body). Keep off in production,
             as the body can include submitted payloads.
+        sensitive_fields: Field names whose values are nulled when a 422 echoes
+            the submitted payload. Replaces ``DEFAULT_SENSITIVE_FIELDS``; extend
+            it with ``DEFAULT_SENSITIVE_FIELDS | {"iban"}``. Pass an empty set
+            to echo every value.
     """
+    app.state.sensitive_fields = frozenset(
+        DEFAULT_SENSITIVE_FIELDS if sensitive_fields is None else sensitive_fields
+    )
     handlers: list[tuple[type[Exception], ExceptionHandler]] = [
         (HTTPException, http_exception_handler),
         (RequestValidationError, validation_exception_handler),

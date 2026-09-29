@@ -274,3 +274,76 @@ def test_error_responses_not_logged_by_default(caplog):
         client.post("/users/", json={"name": "", "email": "x", "age": 1})
 
     assert not [r for r in caplog.records if r.name == "fastapi_sdk.errors"]
+
+
+class SignupCreate(BaseModel):
+    """Signup schema with sensitive fields for masking tests."""
+
+    email: str = Field(..., pattern=r"^[\w\.-]+@[\w\.-]+\.\w+$")
+    password: str = Field(..., min_length=8)
+    billing: dict
+
+
+def _signup_app(**kwargs) -> FastAPI:
+    test_app = FastAPI()
+    register_exception_handlers(test_app, **kwargs)
+
+    @test_app.post("/signup/")
+    async def signup(data: SignupCreate):
+        return data.model_dump()
+
+    @test_app.post("/signup/manual/")
+    async def signup_manual(payload: dict):
+        return SignupCreate.model_validate(payload).model_dump()
+
+    @test_app.post("/signup/form/")
+    async def signup_form(
+        email: str = Form(...), password: str = Form(..., min_length=8)
+    ):
+        return {"email": email}
+
+    return test_app
+
+
+SIGNUP_PAYLOAD = {
+    "email": "not-an-email",
+    "password": "short",
+    "billing": {"card_number": "4242424242424242", "Client-Secret": "s", "city": "X"},
+}
+MASKED_SIGNUP_PAYLOAD = {
+    "email": "not-an-email",
+    "password": None,
+    "billing": {"card_number": None, "Client-Secret": None, "city": "X"},
+}
+
+
+@pytest.mark.parametrize("path", ["/signup/", "/signup/manual/"])
+def test_validation_error_masks_sensitive_fields(path):
+    """Test that sensitive values, including nested ones, are nulled in data."""
+    client = TestClient(_signup_app())
+
+    response = client.post(path, json=SIGNUP_PAYLOAD)
+
+    assert response.status_code == 422
+    assert response.json()["data"] == MASKED_SIGNUP_PAYLOAD
+
+
+def test_form_validation_error_masks_sensitive_fields():
+    """Test that sensitive form fields are nulled in data."""
+    client = TestClient(_signup_app())
+
+    response = client.post(
+        "/signup/form/", data={"email": "x@y.io", "password": "short"}
+    )
+
+    assert response.status_code == 422
+    assert response.json()["data"] == {"email": "x@y.io", "password": None}
+
+
+def test_validation_error_masks_custom_sensitive_fields():
+    """Test that a custom sensitive_fields list replaces the defaults."""
+    client = TestClient(_signup_app(sensitive_fields={"email"}))
+
+    response = client.post("/signup/", json=SIGNUP_PAYLOAD)
+
+    assert response.json()["data"] == {**SIGNUP_PAYLOAD, "email": None}
