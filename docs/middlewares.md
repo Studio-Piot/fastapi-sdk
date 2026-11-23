@@ -210,3 +210,76 @@ app.add_middleware(
    - Ensure your hosting provider supports HTTPS
    - Configure SSL certificates properly
    - Set up proper X-Forwarded-Proto headers in your proxy
+
+## Security Headers Middleware
+
+The `SecurityHeadersMiddleware` adds best-practice HTTP security headers to every response, including error responses returned by other middlewares (such as a 401 from `AuthMiddleware`) and streaming responses.
+
+### Headers
+
+By default it sets:
+
+| Header | Value |
+| --- | --- |
+| `Strict-Transport-Security` | `max-age=63072000; includeSubDomains` |
+| `X-Content-Type-Options` | `nosniff` |
+| `X-Frame-Options` | `DENY` |
+| `Referrer-Policy` | `no-referrer` |
+| `Content-Security-Policy` | `default-src 'none'; frame-ancestors 'none'` |
+| `Cache-Control` | `no-store` |
+
+The defaults suit a JSON API. They are available as `DEFAULT_SECURITY_HEADERS` in `fastapi_sdk.middleware.secure`.
+
+A header the response already has is never overwritten, so a route can still set its own `Cache-Control` or `Content-Security-Policy`.
+
+### Setup
+
+Register it **last**, so it runs outermost and also covers responses returned by the other middlewares:
+
+```python
+from fastapi import FastAPI
+from fastapi_sdk.middleware.auth import AuthMiddleware
+from fastapi_sdk.middleware.secure import EnforceHTTPSMiddleware, SecurityHeadersMiddleware
+
+app = FastAPI()
+
+app.add_middleware(AuthMiddleware, ...)
+app.add_middleware(EnforceHTTPSMiddleware, env=settings.ENVIRONMENT)
+# Added last so it runs outermost
+app.add_middleware(SecurityHeadersMiddleware)
+```
+
+### Configuration
+
+- `headers`: headers merged over the defaults (names are case-insensitive). A value of `None` removes a default.
+- `csp_exempt_paths`: path prefixes that get no `Content-Security-Policy`. Defaults to `("/docs", "/redoc")`, because Swagger UI and ReDoc load scripts from a CDN.
+- `csp_exempt_content_types`: response content types that get no `Content-Security-Policy`, matched as a prefix and ignoring parameters such as `charset`. Empty by default.
+
+### Example: a PDF service
+
+PDFs opened in the browser's viewer need no CSP:
+
+```python
+app.add_middleware(
+    SecurityHeadersMiddleware,
+    csp_exempt_content_types=("application/pdf",),
+)
+```
+
+### Example: overriding headers
+
+```python
+app.add_middleware(
+    SecurityHeadersMiddleware,
+    headers={
+        "X-Frame-Options": "SAMEORIGIN",  # allow framing by the same origin
+        "Cache-Control": None,  # let responses be cached
+        "Permissions-Policy": "camera=(), microphone=()",  # add a header
+    },
+)
+```
+
+### Behavior
+
+- Applies to HTTP responses only; lifespan and websocket connections pass through untouched.
+- Applies to every status code, including redirects, 4xx and 5xx responses.
