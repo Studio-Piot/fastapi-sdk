@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.13.0] - 2026-11-23
+
+### Added
+
+- `SecurityHeadersMiddleware` in `fastapi_sdk.middleware.secure` adds best-practice security headers (HSTS, `X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy`, `Content-Security-Policy` and `Cache-Control`) to every HTTP response, including streaming responses and responses from other middlewares. It never overwrites a header the response already has. Defaults can be overridden or removed with `headers`, and the CSP can be skipped for some paths (`/docs` and `/redoc` by default) or content types such as `application/pdf`. See `docs/middlewares.md`.
+
 ## [0.12.19] - 2026-09-29
 
 ### Fixed
